@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: apisix-control-plane
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/apisix-control-plane
+      auto-index-creation: true
+
+server:
+  port: 8080
+
+# APISIX Configuration
+apisix:
+  admin:
+    key: edd1c9f034335f136f87ad84b625c8f1  # Default APISIX admin key
+    timeout: 30000
+
+logging:
+  level:
+    com.apisix: DEBUG
+    org.springframework.data.mongodb: DEBUG
+

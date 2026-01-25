@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APISIX Control Plane</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 APISIX Control Plane</h1>
+            <p class="subtitle">Environment-Scoped API Gateway Management</p>
+        </header>
+
+        <!-- Notification Area -->
+        <div id="notificationArea" class="notification-area"></div>
+
+        <div class="tabs">
+            <button class="tab-button active" onclick="showTab('organizations', this)">Organizations</button>
+            <button class="tab-button" onclick="showTab('environments', this)">Environments</button>
+            <button class="tab-button" onclick="showTab('upstreams', this)">Upstreams</button>
+            <button class="tab-button" onclick="showTab('apis', this)">APIs</button>
+            <button class="tab-button" onclick="showTab('deployment', this)">Deployment</button>
+        </div>
+
+        <!-- Organizations Tab -->
+        <div id="organizations" class="tab-content active">
+            <div class="section">
+                <h2>Create Organization</h2>
+                <form id="createOrgForm" class="form">
+                    <input type="text" id="orgName" placeholder="Organization Name" required>
+                    <input type="text" id="orgDescription" placeholder="Description">
+                    <button type="submit">Create Organization</button>
+                </form>
+            </div>
+
+            <div class="section">
+                <h2>Organizations</h2>
+                <button onclick="loadOrganizations()" class="refresh-btn">🔄 Refresh</button>
+                <div id="orgsList" class="list"></div>
+            </div>
+        </div>
+
+        <!-- Environments Tab -->
+        <div id="environments" class="tab-content">
+            <div class="section">
+                <h2>Create Environment</h2>
+                <form id="createEnvForm" class="form">
+                    <select id="envOrgId" required>
+                        <option value="">Select Organization</option>
+                    </select>
+                    <input type="text" id="envName" placeholder="Environment Name (e.g., qa, prod)" required>
+                    <input type="text" id="envDescription" placeholder="Description">
+                    <input type="text" id="envApisixUrl" placeholder="APISIX Admin URL (e.g., http://localhost:9180)" required>
+                    <label>
+                        <input type="checkbox" id="envActive" checked>
+                        Active
+                    </label>
+                    <button type="submit">Create Environment</button>
+                </form>
+            </div>
+
+            <div class="section">
+                <h2>Environments</h2>
+                <select id="envOrgFilter" onchange="loadEnvironments()">
+                    <option value="">Select Organization</option>
+                </select>
+                <button onclick="loadEnvironments()" class="refresh-btn">🔄 Refresh</button>
+                <div id="envsList" class="list"></div>
+            </div>
+        </div>
+
+        <!-- Upstreams Tab (Environment-Scoped) -->
+        <div id="upstreams" class="tab-content">
+            <div class="section">
+                <h2>Create Upstream</h2>
+                <p class="info-text">💡 Upstreams are environment-specific and created immediately in APISIX</p>
+                <form id="createUpstreamForm" class="form">
+                    <select id="upstreamOrgId" required onchange="loadEnvironmentsForUpstream()">
+                        <option value="">Select Organization</option>
+                    </select>
+                    <select id="upstreamEnvId" required>
+                        <option value="">Select Environment</option>
+                    </select>
+                    <input type="text" id="upstreamName" placeholder="Upstream Name (unique in environment)" required>
+                    <input type="text" id="upstreamDescription" placeholder="Description">
+                    <input type="text" id="upstreamTargetUrl" placeholder="Target URL (e.g., https://qa-api.example.com)" required>
+                    <select id="upstreamType">
+                        <option value="roundrobin">Round Robin</option>
+                        <option value="chash">Consistent Hash</option>
+                        <option value="least_conn">Least Connections</option>
+                    </select>
+                    <button type="submit">Create Upstream</button>
+                </form>
+            </div>
+
+            <div class="section">
+                <h2>Upstreams by Environment</h2>
+                <select id="upstreamOrgFilter" onchange="loadEnvironmentsForUpstreamFilter()">
+                    <option value="">Select Organization</option>
+                </select>
+                <select id="upstreamEnvFilter" onchange="loadUpstreams()">
+                    <option value="">Select Environment</option>
+                </select>
+                <button onclick="loadUpstreams()" class="refresh-btn">🔄 Refresh</button>
+                <div id="upstreamsList" class="list"></div>
+            </div>
+        </div>
+
+        <!-- APIs Tab -->
+        <div id="apis" class="tab-content">
+            <div class="section">
+                <h2 id="apiFormTitle">Create API / Revision</h2>
+                <form id="createApiForm" class="form">
+                    <input type="hidden" id="editingRevisionId" value="">
+                    <select id="apiOrgId" required onchange="loadEnvironmentsForApi()">
+                        <option value="">Select Organization</option>
+                    </select>
+                    <input type="text" id="apiName" placeholder="API Name" required>
+                    <input type="text" id="apiDescription" placeholder="Description">
+                    
+                    <h3>Environment-Specific Upstreams</h3>
+                    <p class="info-text">💡 Select upstream for each environment (optional, can be set later during deployment)</p>
+                    <div id="environmentUpstreamsContainer"></div>
+                    
+                    <h3>Routes</h3>
+                    <div id="routesContainer"></div>
+                    <button type="button" onclick="addRoute()">+ Add Route</button>
+                    
+                    <div class="form-actions">
+                        <div id="createButtons" class="button-group-row">
+                            <div class="button-group">
+                                <button type="submit">Create New API</button>
+                                <div class="help-text">Use this for a brand new API (first time)</div>
+                            </div>
+                            <div class="button-group">
+                                <button type="button" onclick="createRevision()">Create New Revision</button>
+                                <div class="help-text">Use this to add a new version to an existing API</div>
+                            </div>
+                        </div>
+                        <div id="editButtons" class="button-group-row" style="display: none;">
+                            <div class="button-group">
+                                <button type="button" onclick="updateRevision()">Update Revision</button>
+                                <div class="help-text">Save changes to this DRAFT revision</div>
+                            </div>
+                            <div class="button-group">
+                                <button type="button" onclick="cancelEdit()" class="secondary-btn">Cancel</button>
+                                <div class="help-text">Discard changes and return to create mode</div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <div class="section">
+                <h2>APIs</h2>
+                <select id="apiOrgFilter" onchange="loadApis()">
+                    <option value="">Select Organization</option>
+                </select>
+                <button onclick="loadApis()" class="refresh-btn">🔄 Refresh</button>
+                <div id="apisList" class="list"></div>
+            </div>
+        </div>
+
+        <!-- Deployment Tab -->
+        <div id="deployment" class="tab-content">
+            <div class="section">
+                <h2>Deploy / Undeploy Revision</h2>
+                <form id="deploymentForm" class="form">
+                    <select id="deployOrgId" required onchange="loadApisForDeployment()">
+                        <option value="">Select Organization</option>
+                    </select>
+                    <select id="deployApiName" required onchange="loadApiRevisions()">
+                        <option value="">Select API</option>
+                    </select>
+                    <select id="deployRevisionId" required onchange="loadDeploymentData()">
+                        <option value="">Select Revision</option>
+                    </select>
+                    
+                    <div id="deploymentEnvironments"></div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
