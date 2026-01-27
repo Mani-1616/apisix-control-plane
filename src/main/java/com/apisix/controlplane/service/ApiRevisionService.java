@@ -220,6 +220,50 @@ public class ApiRevisionService {
     }
 
     @Transactional
+    public ApiRevision cloneRevision(String revisionId) {
+        log.info("Cloning revision: {}", revisionId);
+        
+        ApiRevision sourceRevision = apiRevisionRepository.findById(revisionId)
+                .orElseThrow(() -> new ResourceNotFoundException("API Revision not found with ID: " + revisionId));
+        
+        // Get the latest revision number for this API
+        ApiRevision latestRevision = apiRevisionRepository
+                .findFirstByOrgIdAndNameOrderByRevisionNumberDesc(sourceRevision.getOrgId(), sourceRevision.getName())
+                .orElse(sourceRevision);
+        
+        int newRevisionNumber = latestRevision.getRevisionNumber() + 1;
+        
+        // Clone the environment mappings but set all to DRAFT state
+        Map<String, EnvironmentDeploymentStatus> clonedEnvironments = new HashMap<>();
+        if (sourceRevision.getEnvironments() != null) {
+            for (Map.Entry<String, EnvironmentDeploymentStatus> entry : sourceRevision.getEnvironments().entrySet()) {
+                clonedEnvironments.put(entry.getKey(), EnvironmentDeploymentStatus.builder()
+                        .status(RevisionState.DRAFT)
+                        .upstreamId(entry.getValue().getUpstreamId())
+                        .build());
+            }
+        }
+        
+        // Create cloned revision
+        ApiRevision clonedRevision = ApiRevision.builder()
+                .orgId(sourceRevision.getOrgId())
+                .name(sourceRevision.getName())
+                .description(sourceRevision.getDescription())
+                .revisionNumber(newRevisionNumber)
+                .state(RevisionState.DRAFT)
+                .environments(clonedEnvironments)
+                .serviceConfig(sourceRevision.getServiceConfig())
+                .routes(sourceRevision.getRoutes())
+                .build();
+        
+        ApiRevision saved = apiRevisionRepository.save(clonedRevision);
+        log.info("Cloned revision created with ID: {} (Revision: {}) from source revision: {}", 
+                saved.getId(), saved.getRevisionNumber(), revisionId);
+        
+        return saved;
+    }
+
+    @Transactional
     public void deleteRevision(String revisionId) {
         ApiRevision revision = apiRevisionRepository.findById(revisionId)
                 .orElseThrow(() -> new ResourceNotFoundException("API Revision not found with ID: " + revisionId));

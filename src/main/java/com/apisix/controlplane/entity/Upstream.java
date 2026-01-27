@@ -113,7 +113,15 @@ public class Upstream {
             return apisixId; // Return cached value
         }
         
-        String envHash = Integer.toHexString(environmentId.hashCode()).substring(0, 8);
+        // Generate hash and ensure it's at least 8 characters (pad with zeros if needed)
+        String envHash = Integer.toHexString(environmentId.hashCode());
+        // Pad with leading zeros if necessary to ensure minimum 8 characters
+        envHash = String.format("%8s", envHash).replace(' ', '0');
+        // Take first 8 characters
+        if (envHash.length() > 8) {
+            envHash = envHash.substring(0, 8);
+        }
+        
         String sanitizedName = name.replaceAll("[^a-zA-Z0-9-_]", "-").toLowerCase();
         sanitizedName = sanitizedName.replaceAll("-+", "-").replaceAll("^-|-$", "");
         

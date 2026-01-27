@@ -107,6 +107,17 @@ public class ApiRevisionController {
     }
 
     /**
+     * Clone a revision (creates a new DRAFT revision with the same configuration)
+     */
+    @PostMapping("/revisions/{revisionId}/clone")
+    public ResponseEntity<ApiRevision> cloneRevision(
+            @PathVariable String orgId,
+            @PathVariable String revisionId) {
+        ApiRevision clonedRevision = apiRevisionService.cloneRevision(revisionId);
+        return ResponseEntity.status(HttpStatus.CREATED).body(clonedRevision);
+    }
+
+    /**
      * Deploy a revision to selected environments
      */
     @PostMapping("/revisions/{revisionId}/deploy")

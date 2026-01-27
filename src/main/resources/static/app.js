@@ -84,6 +84,14 @@ function showTab(tabName, targetButton) {
         loadEnvironmentsForApi();
         loadApis();
     }
+    if (tabName === 'developers') loadDevelopers();
+    if (tabName === 'subscriptions') {
+        loadDevelopersForSubscription();
+        loadEnvironmentsForSubscription();
+        loadDevelopersForFilter();
+        loadEnvironmentsForFilter();
+        loadSubscriptions();
+    }
     if (tabName === 'deployment') loadApisForDeployment();
 }
 
@@ -427,6 +435,7 @@ function addRoute() {
         <input type="text" placeholder="Route Name" data-route-name required>
         <input type="text" placeholder="Methods (comma-separated, e.g., GET,POST)" data-route-methods required>
         <input type="text" placeholder="URIs (comma-separated, e.g., /api/users)" data-route-uris required>
+        <textarea placeholder='Route Plugins JSON (optional), e.g., {"cors": {}}' data-route-plugins rows="2"></textarea>
         <button type="button" onclick="this.parentElement.remove()">Remove Route</button>
     `;
     container.appendChild(routeDiv);
@@ -451,6 +460,18 @@ async function createApi() {
     const name = document.getElementById('apiName').value;
     const description = document.getElementById('apiDescription').value;
     
+    // Parse service-level plugins
+    const servicePluginsText = document.getElementById('servicePlugins').value.trim();
+    let servicePlugins = {};
+    if (servicePluginsText) {
+        try {
+            servicePlugins = JSON.parse(servicePluginsText);
+        } catch (e) {
+            showNotification('error', 'Invalid JSON', 'Service plugins JSON is invalid: ' + e.message);
+            return;
+        }
+    }
+    
     // Collect environment-upstream mappings
     const environmentUpstreams = {};
     const envUpstreamSelects = document.querySelectorAll('#environmentUpstreamsContainer select');
@@ -468,11 +489,24 @@ async function createApi() {
         const name = routeDiv.querySelector('[data-route-name]').value;
         const methods = routeDiv.querySelector('[data-route-methods]').value.split(',').map(m => m.trim());
         const uris = routeDiv.querySelector('[data-route-uris]').value.split(',').map(u => u.trim());
-        routes.push({ name, methods, uris, plugins: {}, metadata: {} });
+        
+        // Parse route-level plugins
+        const routePluginsText = routeDiv.querySelector('[data-route-plugins]').value.trim();
+        let routePlugins = {};
+        if (routePluginsText) {
+            try {
+                routePlugins = JSON.parse(routePluginsText);
+            } catch (e) {
+                showNotification('error', 'Invalid JSON', `Route "${name}" plugins JSON is invalid: ${e.message}`);
+                throw e; // Stop processing
+            }
+        }
+        
+        routes.push({ name, methods, uris, plugins: routePlugins, metadata: {} });
     });
     
     if (routes.length === 0) {
-        alert('Please add at least one route');
+        showNotification('warning', 'No Routes', 'Please add at least one route');
         return;
     }
     
@@ -484,23 +518,23 @@ async function createApi() {
                 name,
                 description,
                 environmentUpstreams,
-                serviceConfig: { plugins: {}, metadata: {} },
+                serviceConfig: { plugins: servicePlugins, metadata: {} },
                 routes
             })
         });
         
         if (response.ok) {
-            alert('API created successfully!');
+            showNotification('success', 'API Created', `API "${name}" created successfully`);
             document.getElementById('createApiForm').reset();
             document.getElementById('routesContainer').innerHTML = '';
             routeCount = 0;
             loadApis();
         } else {
             const error = await response.text();
-            alert('Failed to create API: ' + error);
+            showNotification('error', 'Creation Failed', error);
         }
     } catch (error) {
-        alert('Error: ' + error.message);
+        showNotification('error', 'Error', error.message);
     }
 }
 
@@ -512,8 +546,20 @@ async function createRevision() {
     const description = document.getElementById('apiDescription').value;
     
     if (!apiName) {
-        alert('Please enter API name');
+        showNotification('warning', 'Missing API Name', 'Please enter API name');
         return;
+    }
+    
+    // Parse service-level plugins
+    const servicePluginsText = document.getElementById('servicePlugins').value.trim();
+    let servicePlugins = {};
+    if (servicePluginsText) {
+        try {
+            servicePlugins = JSON.parse(servicePluginsText);
+        } catch (e) {
+            showNotification('error', 'Invalid JSON', 'Service plugins JSON is invalid: ' + e.message);
+            return;
+        }
     }
     
     // Collect environment-upstream mappings
@@ -533,11 +579,24 @@ async function createRevision() {
         const name = routeDiv.querySelector('[data-route-name]').value;
         const methods = routeDiv.querySelector('[data-route-methods]').value.split(',').map(m => m.trim());
         const uris = routeDiv.querySelector('[data-route-uris]').value.split(',').map(u => u.trim());
-        routes.push({ name, methods, uris, plugins: {}, metadata: {} });
+        
+        // Parse route-level plugins
+        const routePluginsText = routeDiv.querySelector('[data-route-plugins]').value.trim();
+        let routePlugins = {};
+        if (routePluginsText) {
+            try {
+                routePlugins = JSON.parse(routePluginsText);
+            } catch (e) {
+                showNotification('error', 'Invalid JSON', `Route "${name}" plugins JSON is invalid: ${e.message}`);
+                throw e;
+            }
+        }
+        
+        routes.push({ name, methods, uris, plugins: routePlugins, metadata: {} });
     });
     
     if (routes.length === 0) {
-        alert('Please add at least one route');
+        showNotification('warning', 'No Routes', 'Please add at least one route');
         return;
     }
     
@@ -546,41 +605,53 @@ async function createRevision() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                name: apiName, // Include the API name in the request body
+                name: apiName,
                 description,
                 environmentUpstreams,
-                serviceConfig: { plugins: {}, metadata: {} },
+                serviceConfig: { plugins: servicePlugins, metadata: {} },
                 routes
             })
         });
         
         if (response.ok) {
-            alert('New revision created successfully!');
+            showNotification('success', 'Revision Created', 'New revision created successfully');
             document.getElementById('createApiForm').reset();
             document.getElementById('routesContainer').innerHTML = '';
             routeCount = 0;
             loadApis();
         } else {
             const error = await response.text();
-            alert('Failed to create revision: ' + error);
+            showNotification('error', 'Creation Failed', error);
         }
     } catch (error) {
-        alert('Error: ' + error.message);
+        showNotification('error', 'Error', error.message);
     }
 }
 
 async function updateRevision() {
     const revisionId = document.getElementById('editingRevisionId').value;
     if (!revisionId) {
-        alert('No revision selected for editing');
+        showNotification('warning', 'No Revision', 'No revision selected for editing');
         return;
     }
     
     const orgId = getCurrentOrgId();
     if (!orgId) return;
     
-    const name = document.getElementById('apiName').value; // Get name even though field is disabled
+    const name = document.getElementById('apiName').value;
     const description = document.getElementById('apiDescription').value;
+    
+    // Parse service-level plugins
+    const servicePluginsText = document.getElementById('servicePlugins').value.trim();
+    let servicePlugins = {};
+    if (servicePluginsText) {
+        try {
+            servicePlugins = JSON.parse(servicePluginsText);
+        } catch (e) {
+            showNotification('error', 'Invalid JSON', 'Service plugins JSON is invalid: ' + e.message);
+            return;
+        }
+    }
     
     // Collect environment-upstream mappings
     const environmentUpstreams = {};
@@ -599,11 +670,24 @@ async function updateRevision() {
         const name = routeDiv.querySelector('[data-route-name]').value;
         const methods = routeDiv.querySelector('[data-route-methods]').value.split(',').map(m => m.trim());
         const uris = routeDiv.querySelector('[data-route-uris]').value.split(',').map(u => u.trim());
-        routes.push({ name, methods, uris, plugins: {}, metadata: {} });
+        
+        // Parse route-level plugins
+        const routePluginsText = routeDiv.querySelector('[data-route-plugins]').value.trim();
+        let routePlugins = {};
+        if (routePluginsText) {
+            try {
+                routePlugins = JSON.parse(routePluginsText);
+            } catch (e) {
+                showNotification('error', 'Invalid JSON', `Route "${name}" plugins JSON is invalid: ${e.message}`);
+                throw e;
+            }
+        }
+        
+        routes.push({ name, methods, uris, plugins: routePlugins, metadata: {} });
     });
     
     if (routes.length === 0) {
-        alert('Please add at least one route');
+        showNotification('warning', 'No Routes', 'Please add at least one route');
         return;
     }
     
@@ -612,24 +696,24 @@ async function updateRevision() {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                name, // Include the name explicitly
+                name,
                 description,
                 environmentUpstreams,
-                serviceConfig: { plugins: {}, metadata: {} },
+                serviceConfig: { plugins: servicePlugins, metadata: {} },
                 routes
             })
         });
         
         if (response.ok) {
-            alert('Revision updated successfully!');
+            showNotification('success', 'Revision Updated', 'Revision updated successfully');
             cancelEdit();
             loadApis();
         } else {
             const error = await response.text();
-            alert('Failed to update revision: ' + error);
+            showNotification('error', 'Update Failed', error);
         }
     } catch (error) {
-        alert('Error: ' + error.message);
+        showNotification('error', 'Error', error.message);
     }
 }
 
@@ -713,12 +797,13 @@ function displayApis(allRevisions, orgId) {
                             ${revision.description ? `<p class="revision-description">${revision.description}</p>` : ''}
                         </div>
                     </div>
-                    ${revision.state === 'DRAFT' ? `
-                        <div class="revision-actions">
+                    <div class="revision-actions">
+                        <button class="action-btn clone-btn" onclick="cloneRevision('${orgId}', '${revision.id}', '${revision.revisionNumber}')" title="Clone this revision">📋 Clone</button>
+                        ${revision.state === 'DRAFT' ? `
                             <button class="action-btn edit-btn" onclick="editRevision('${orgId}', '${revision.id}')" title="Edit this DRAFT revision">✏️ Edit</button>
                             <button class="action-btn delete-btn" onclick="deleteRevision('${orgId}', '${revision.id}')" title="Delete this DRAFT revision">🗑️ Delete</button>
-                        </div>
-                    ` : ''}
+                        ` : ''}
+                    </div>
                 </div>
             `;
         }).join('');
@@ -759,6 +844,14 @@ async function editRevision(orgId, revisionId) {
         document.getElementById('apiName').disabled = true;
         document.getElementById('apiDescription').value = revision.description || '';
         
+        // Populate service-level plugins
+        if (revision.serviceConfig && revision.serviceConfig.plugins) {
+            const pluginsJson = JSON.stringify(revision.serviceConfig.plugins, null, 2);
+            document.getElementById('servicePlugins').value = pluginsJson;
+        } else {
+            document.getElementById('servicePlugins').value = '';
+        }
+        
         // Populate environment upstreams
         if (revision.environments) {
             Object.entries(revision.environments).forEach(([envId, status]) => {
@@ -770,7 +863,7 @@ async function editRevision(orgId, revisionId) {
         }
         
         // Populate routes
-    document.getElementById('routesContainer').innerHTML = '';
+        document.getElementById('routesContainer').innerHTML = '';
         routeCount = 0;
         if (revision.routes && revision.routes.length > 0) {
             revision.routes.forEach(route => {
@@ -780,6 +873,12 @@ async function editRevision(orgId, revisionId) {
                     routeDiv.querySelector('[data-route-name]').value = route.name;
                     routeDiv.querySelector('[data-route-methods]').value = route.methods.join(', ');
                     routeDiv.querySelector('[data-route-uris]').value = route.uris.join(', ');
+                    
+                    // Populate route-level plugins
+                    if (route.plugins && Object.keys(route.plugins).length > 0) {
+                        const routePluginsJson = JSON.stringify(route.plugins, null, 2);
+                        routeDiv.querySelector('[data-route-plugins]').value = routePluginsJson;
+                    }
                 }
             });
         }
@@ -804,14 +903,35 @@ async function deleteRevision(orgId, revisionId) {
         });
         
         if (response.ok) {
-            alert('Revision deleted successfully!');
+            showNotification('success', 'Deleted', 'Revision deleted successfully!');
             loadApis();
         } else {
             const error = await response.text();
-            alert('Failed to delete revision: ' + error);
+            showNotification('error', 'Failed', 'Failed to delete revision: ' + error);
         }
     } catch (error) {
-        alert('Error: ' + error.message);
+        showNotification('error', 'Error', error.message);
+    }
+}
+
+async function cloneRevision(orgId, revisionId, revisionNumber) {
+    if (!confirm(`Clone Revision ${revisionNumber}? This will create a new DRAFT revision with the same configuration.`)) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/organizations/${orgId}/apis/revisions/${revisionId}/clone`, {
+            method: 'POST'
+        });
+        
+        if (response.ok) {
+            const clonedRevision = await response.json();
+            showNotification('success', 'Cloned', `New revision ${clonedRevision.revisionNumber} created successfully!`);
+            loadApis();
+        } else {
+            const error = await response.text();
+            showNotification('error', 'Failed', 'Failed to clone revision: ' + error);
+        }
+    } catch (error) {
+        showNotification('error', 'Error', error.message);
     }
 }
 
@@ -1190,6 +1310,369 @@ function showNotification(type, title, message) {
             setTimeout(() => notification.remove(), 300);
         }
     }, 5000);
+}
+
+// ===== DEVELOPERS =====
+document.getElementById('createDeveloperForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const orgId = getCurrentOrgId();
+    if (!orgId) return;
+    
+    const email = document.getElementById('developerEmail').value;
+    const name = document.getElementById('developerName').value;
+    
+    try {
+        const response = await fetch(`${API_BASE}/organizations/${orgId}/developers`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, name })
+        });
+        
+        if (response.ok) {
+            showNotification('success', 'Developer Added', `Developer "${name}" added successfully`);
+            e.target.reset();
+            loadDevelopers();
+        } else {
+            const error = await response.text();
+            showNotification('error', 'Failed', error);
+        }
+    } catch (error) {
+        showNotification('error', 'Error', error.message);
+    }
+});
+
+async function loadDevelopers() {
+    const orgId = getCurrentOrgId();
+    if (!orgId) {
+        document.getElementById('developersList').innerHTML = 
+            '<p class="info-text">Please select an organization from the top right corner</p>';
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/organizations/${orgId}/developers`);
+        const developers = await response.json();
+        
+        displayDevelopers(developers, orgId);
+    } catch (error) {
+        console.error('Error loading developers:', error);
+    }
+}
+
+function displayDevelopers(developers, orgId) {
+    const list = document.getElementById('developersList');
+    
+    if (developers.length === 0) {
+        list.innerHTML = '<p class="info-text">No developers found. Add a developer to get started.</p>';
+        return;
+    }
+    
+    list.innerHTML = developers.map(dev => `
+        <div class="card">
+            <h3>${dev.name}</h3>
+            <p><strong>Email:</strong> ${dev.email}</p>
+            <small>ID: ${dev.id}</small>
+            <div class="card-actions">
+                <button onclick="deleteDeveloper('${orgId}', '${dev.id}', '${dev.name}')" class="btn-danger">
+                    🗑️ Remove
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function deleteDeveloper(orgId, developerId, name) {
+    if (!confirm(`Remove developer "${name}"? This cannot be undone.`)) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/organizations/${orgId}/developers/${developerId}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            showNotification('success', 'Developer Removed', `Developer "${name}" removed successfully`);
+            loadDevelopers();
+        } else {
+            const error = await response.text();
+            showNotification('error', 'Failed', error);
+        }
+    } catch (error) {
+        showNotification('error', 'Error', error.message);
+    }
+}
+
+// ===== API SUBSCRIPTIONS =====
+document.getElementById('createSubscriptionForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const orgId = getCurrentOrgId();
+    if (!orgId) return;
+    
+    const developerId = document.getElementById('subDeveloperId').value;
+    const envId = document.getElementById('subEnvId').value;
+    const apiName = document.getElementById('subApiName').value;
+    
+    try {
+        const response = await fetch(`${API_BASE}/organizations/${orgId}/subscriptions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ developerId, envId, apiName })
+        });
+        
+        if (response.ok) {
+            const subscription = await response.json();
+            showNotification('success', 'Subscription Created', 
+                `API key: ${subscription.apiKey}<br><small>Save this key - it won't be shown again</small>`);
+            e.target.reset();
+            loadSubscriptions();
+        } else {
+            const error = await response.text();
+            showNotification('error', 'Failed', error);
+        }
+    } catch (error) {
+        showNotification('error', 'Error', error.message);
+    }
+});
+
+async function loadDevelopersForSubscription() {
+    const orgId = getCurrentOrgId();
+    const select = document.getElementById('subDeveloperId');
+    
+    if (!select) return;
+    
+    if (!orgId) {
+        select.innerHTML = '<option value="">Select org first</option>';
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/organizations/${orgId}/developers`);
+        const developers = await response.json();
+        
+        select.innerHTML = '<option value="">Select Developer</option>' +
+            developers.map(dev => `<option value="${dev.id}">${dev.name} (${dev.email})</option>`).join('');
+    } catch (error) {
+        console.error('Error loading developers:', error);
+    }
+}
+
+async function loadEnvironmentsForSubscription() {
+    const orgId = getCurrentOrgId();
+    const select = document.getElementById('subEnvId');
+    
+    if (!select) return;
+    
+    if (!orgId) {
+        select.innerHTML = '<option value="">Select org first</option>';
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/organizations/${orgId}/environments`);
+        const envs = await response.json();
+        
+        select.innerHTML = '<option value="">Select Environment</option>' +
+            envs.map(env => `<option value="${env.id}">${env.name}</option>`).join('');
+    } catch (error) {
+        console.error('Error loading environments:', error);
+    }
+}
+
+async function loadApisForSubscription() {
+    const orgId = getCurrentOrgId();
+    const envId = document.getElementById('subEnvId').value;
+    const select = document.getElementById('subApiName');
+    
+    if (!select) return;
+    
+    if (!orgId || !envId) {
+        select.innerHTML = '<option value="">Select env first</option>';
+        return;
+    }
+    
+    try {
+        // Get all APIs and filter those deployed in the selected environment
+        const response = await fetch(`${API_BASE}/organizations/${orgId}/apis`);
+        const data = await response.json();
+        
+        // Find deployed APIs in this environment
+        const deployedApis = [];
+        if (data.apis) {
+            Object.entries(data.apis).forEach(([apiName, revisions]) => {
+                const hasDeployed = revisions.some(rev => 
+                    rev.environments && 
+                    rev.environments[envId] && 
+                    rev.environments[envId].status === 'DEPLOYED'
+                );
+                if (hasDeployed) {
+                    deployedApis.push(apiName);
+                }
+            });
+        }
+        
+        select.innerHTML = '<option value="">Select API</option>' +
+            deployedApis.map(name => `<option value="${name}">${name}</option>`).join('');
+    } catch (error) {
+        console.error('Error loading APIs:', error);
+    }
+}
+
+async function loadDevelopersForFilter() {
+    const orgId = getCurrentOrgId();
+    const select = document.getElementById('subFilterDeveloperId');
+    
+    if (!select) return;
+    
+    if (!orgId) {
+        select.innerHTML = '<option value="">All Developers</option>';
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/organizations/${orgId}/developers`);
+        const developers = await response.json();
+        
+        select.innerHTML = '<option value="">All Developers</option>' +
+            developers.map(dev => `<option value="${dev.id}">${dev.name}</option>`).join('');
+    } catch (error) {
+        console.error('Error loading developers:', error);
+    }
+}
+
+async function loadEnvironmentsForFilter() {
+    const orgId = getCurrentOrgId();
+    const select = document.getElementById('subFilterEnvId');
+    
+    if (!select) return;
+    
+    if (!orgId) {
+        select.innerHTML = '<option value="">All Environments</option>';
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/organizations/${orgId}/environments`);
+        const envs = await response.json();
+        
+        select.innerHTML = '<option value="">All Environments</option>' +
+            envs.map(env => `<option value="${env.id}">${env.name}</option>`).join('');
+    } catch (error) {
+        console.error('Error loading environments:', error);
+    }
+}
+
+async function loadSubscriptions() {
+    const orgId = getCurrentOrgId();
+    if (!orgId) {
+        document.getElementById('subscriptionsList').innerHTML = 
+            '<p class="info-text">Please select an organization from the top right corner</p>';
+        return;
+    }
+    
+    const developerId = document.getElementById('subFilterDeveloperId')?.value || '';
+    const envId = document.getElementById('subFilterEnvId')?.value || '';
+    
+    try {
+        let url = `${API_BASE}/organizations/${orgId}/subscriptions`;
+        
+        // Build query parameters
+        const params = new URLSearchParams();
+        if (developerId) {
+            params.append('developerId', developerId);
+        }
+        if (envId) {
+            params.append('envId', envId);
+        }
+        
+        if (params.toString()) {
+            url += `?${params.toString()}`;
+        }
+        
+        const response = await fetch(url);
+        const subscriptions = await response.json();
+        
+        displaySubscriptions(subscriptions, orgId);
+    } catch (error) {
+        console.error('Error loading subscriptions:', error);
+    }
+}
+
+function displaySubscriptions(subscriptions, orgId) {
+    const list = document.getElementById('subscriptionsList');
+    
+    if (subscriptions.length === 0) {
+        list.innerHTML = '<p class="info-text">No subscriptions found.</p>';
+        return;
+    }
+    
+    list.innerHTML = subscriptions.map(sub => {
+        const statusClass = sub.status === 'ACTIVE' ? 'success' : 
+                          sub.status === 'REVOKED' ? 'danger' : 'warning';
+        
+        return `
+            <div class="card">
+                <h3>${sub.apiName}</h3>
+                <p><strong>Developer ID:</strong> ${sub.developerId}</p>
+                <p><strong>Environment ID:</strong> ${sub.envId}</p>
+                <p><strong>Consumer ID:</strong> ${sub.apisixConsumerId}</p>
+                <p><strong>Status:</strong> <span class="badge ${statusClass}">${sub.status}</span></p>
+                <p><strong>Created:</strong> ${new Date(sub.createdAt).toLocaleString()}</p>
+                <div class="card-actions">
+                    ${sub.status === 'ACTIVE' ? `
+                        <button onclick="revokeSubscription('${orgId}', '${sub.id}', '${sub.apiName}')" 
+                                class="btn-danger">
+                            🚫 Revoke Access
+                        </button>
+                    ` : ''}
+                    ${sub.status === 'REVOKED' ? `
+                        <button onclick="grantSubscription('${orgId}', '${sub.id}', '${sub.apiName}')" 
+                                class="btn-primary">
+                            ✅ Grant Access
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function revokeSubscription(orgId, subscriptionId, apiName) {
+    if (!confirm(`Revoke subscription to "${apiName}"? The developer will lose access.`)) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/organizations/${orgId}/subscriptions/${subscriptionId}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            showNotification('success', 'Subscription Revoked', `Subscription to "${apiName}" revoked successfully`);
+            loadSubscriptions();
+        } else {
+            const error = await response.text();
+            showNotification('error', 'Failed', error);
+        }
+    } catch (error) {
+        showNotification('error', 'Error', error.message);
+    }
+}
+
+async function grantSubscription(orgId, subscriptionId, apiName) {
+    if (!confirm(`Grant access to "${apiName}"? The developer will regain access.`)) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/organizations/${orgId}/subscriptions/${subscriptionId}/grant`, {
+            method: 'PUT'
+        });
+        
+        if (response.ok) {
+            showNotification('success', 'Access Granted', `Access to "${apiName}" granted successfully`);
+            loadSubscriptions();
+        } else {
+            const error = await response.text();
+            showNotification('error', 'Failed', error);
+        }
+    } catch (error) {
+        showNotification('error', 'Error', error.message);
+    }
 }
 
 // Initialize on page load

@@ -254,6 +254,37 @@ header h1 {
     font-size: 1.1rem;
 }
 
+.card {
+    background: var(--card-bg);
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 15px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    border: 1px solid var(--border-color);
+}
+
+.card h3 {
+    margin: 0 0 15px 0;
+    color: var(--primary-color);
+    font-size: 1.2rem;
+}
+
+.card p {
+    margin: 8px 0;
+    color: var(--text-color);
+}
+
+.card small {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.card-actions {
+    margin-top: 15px;
+    display: flex;
+    gap: 10px;
+}
+
 .form {
     display: flex;
     flex-direction: column;
@@ -261,18 +292,28 @@ header h1 {
 }
 
 .form input,
-.form select {
+.form select,
+.form textarea {
     padding: 12px;
     border: 2px solid var(--border-color);
     border-radius: 8px;
     font-size: 1rem;
     transition: border-color 0.3s ease;
+    font-family: inherit;
 }
 
 .form input:focus,
-.form select:focus {
+.form select:focus,
+.form textarea:focus {
     outline: none;
     border-color: var(--primary-color);
+}
+
+.form textarea {
+    resize: vertical;
+    min-height: 80px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9rem;
 }
 
 .form button {
@@ -379,6 +420,18 @@ header h1 {
     color: white;
 }
 
+.filter-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+    align-items: center;
+}
+
+.filter-row select {
+    flex: 1;
+    max-width: 250px;
+}
+
 .list {
     margin-top: 15px;
 }
@@ -441,6 +494,21 @@ header h1 {
 
 .badge-inactive {
     background: var(--text-secondary);
+    color: white;
+}
+
+.badge.success {
+    background: var(--success-color);
+    color: white;
+}
+
+.badge.danger {
+    background: var(--danger-color);
+    color: white;
+}
+
+.badge.warning {
+    background: var(--warning-color);
     color: white;
 }
 
@@ -573,6 +641,17 @@ header h1 {
     background: #dc2626;
     transform: translateY(-1px);
     box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.clone-btn {
+    background: #8b5cf6;
+    color: white;
+}
+
+.clone-btn:hover {
+    background: #7c3aed;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
 }
 
 .deployment-info {
@@ -741,6 +820,11 @@ header h1 {
 
 .route-item input {
     margin-bottom: 10px;
+}
+
+.route-item textarea {
+    margin-bottom: 10px;
+    width: 100%;
 }
 
 .route-item button {

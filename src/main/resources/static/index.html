@@ -31,6 +31,8 @@
             <button class="tab-button" onclick="showTab('environments', this)">Environments</button>
             <button class="tab-button" onclick="showTab('upstreams', this)">Upstreams</button>
             <button class="tab-button" onclick="showTab('apis', this)">APIs</button>
+            <button class="tab-button" onclick="showTab('developers', this)">Developers</button>
+            <button class="tab-button" onclick="showTab('subscriptions', this)">API Subscriptions</button>
             <button class="tab-button" onclick="showTab('deployment', this)">Deployment</button>
         </div>
 
@@ -115,6 +117,11 @@
                     <input type="text" id="apiName" placeholder="API Name" required>
                     <input type="text" id="apiDescription" placeholder="Description">
                     
+                    <h3>Service-Level APISIX Plugins (Optional)</h3>
+                    <p class="info-text">💡 Configure APISIX plugins for the entire service (applies to all routes)</p>
+                    <textarea id="servicePlugins" placeholder='Enter JSON config, e.g., {"limit-count": {"count": 100, "time_window": 60}}' rows="4"></textarea>
+                    <small class="help-text">Leave empty if no service-level plugins needed</small>
+                    
                     <h3>Environment-Specific Upstreams</h3>
                     <p class="info-text">💡 Select upstream for each environment (optional, can be set later during deployment)</p>
                     <div id="environmentUpstreamsContainer"></div>
@@ -152,6 +159,57 @@
                 <h2>APIs</h2>
                 <button onclick="loadApis()" class="refresh-btn">🔄 Refresh</button>
                 <div id="apisList" class="list"></div>
+            </div>
+        </div>
+
+        <!-- Developers Tab -->
+        <div id="developers" class="tab-content">
+            <div class="section">
+                <h2>Add Developer</h2>
+                <form id="createDeveloperForm" class="form">
+                    <input type="email" id="developerEmail" placeholder="Email" required>
+                    <input type="text" id="developerName" placeholder="Name" required>
+                    <button type="submit">Add Developer</button>
+                </form>
+            </div>
+
+            <div class="section">
+                <h2>Developers</h2>
+                <button onclick="loadDevelopers()" class="refresh-btn">🔄 Refresh</button>
+                <div id="developersList" class="list"></div>
+            </div>
+        </div>
+
+        <!-- API Subscriptions Tab -->
+        <div id="subscriptions" class="tab-content">
+            <div class="section">
+                <h2>Create Subscription</h2>
+                <form id="createSubscriptionForm" class="form">
+                    <select id="subDeveloperId" required>
+                        <option value="">Select Developer</option>
+                    </select>
+                    <select id="subEnvId" required onchange="loadApisForSubscription()">
+                        <option value="">Select Environment</option>
+                    </select>
+                    <select id="subApiName" required>
+                        <option value="">Select API</option>
+                    </select>
+                    <button type="submit">Subscribe</button>
+                </form>
+            </div>
+
+            <div class="section">
+                <h2>Subscriptions</h2>
+                <div class="filter-row">
+                    <select id="subFilterDeveloperId" onchange="loadSubscriptions()">
+                        <option value="">All Developers</option>
+                    </select>
+                    <select id="subFilterEnvId" onchange="loadSubscriptions()">
+                        <option value="">All Environments</option>
+                    </select>
+                    <button onclick="loadSubscriptions()" class="refresh-btn">🔄 Refresh</button>
+                </div>
+                <div id="subscriptionsList" class="list"></div>
             </div>
         </div>
 
