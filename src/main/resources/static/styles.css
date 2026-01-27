@@ -31,13 +31,24 @@ body {
 }
 
 header {
-    text-align: center;
-    padding: 40px 0;
+    padding: 30px 40px;
     background: linear-gradient(135deg, var(--primary-color), #7c3aed);
     color: white;
     border-radius: 16px;
     margin-bottom: 30px;
     box-shadow: 0 10px 25px rgba(79, 70, 229, 0.2);
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 30px;
+}
+
+.header-title {
+    text-align: left;
+    flex: 1;
 }
 
 header h1 {
@@ -48,6 +59,44 @@ header h1 {
 .subtitle {
     font-size: 1.1rem;
     opacity: 0.9;
+}
+
+.global-org-selector {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    min-width: 250px;
+}
+
+.global-org-selector label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    opacity: 0.9;
+}
+
+.global-org-selector select {
+    width: 100%;
+    padding: 10px 14px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 8px;
+    font-size: 1rem;
+    background: rgba(255, 255, 255, 0.95);
+    color: var(--text-color);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.global-org-selector select:hover {
+    border-color: rgba(255, 255, 255, 0.6);
+    background: white;
+}
+
+.global-org-selector select:focus {
+    outline: none;
+    border-color: white;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2);
 }
 
 /* Notification Area */

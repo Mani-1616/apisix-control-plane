@@ -1,11 +1,58 @@
 // Global state
-let selectedOrgId = null;
+let globalOrgId = null; // Selected org from global selector
 let selectedEnvId = null;
 let environments = [];
 let upstreams = [];
 
 // API Base URL
 const API_BASE = '/api/v1';
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadOrganizations();
+});
+
+// Handle global organization change
+function handleGlobalOrgChange() {
+    const selector = document.getElementById('globalOrgSelector');
+    globalOrgId = selector.value;
+    
+    if (globalOrgId) {
+        // Store in localStorage for persistence
+        localStorage.setItem('selectedOrgId', globalOrgId);
+        
+        // Reload current tab data
+        const activeTab = document.querySelector('.tab-content.active');
+        if (activeTab) {
+            const tabId = activeTab.id;
+            if (tabId === 'environments') loadEnvironments();
+            if (tabId === 'upstreams') {
+                loadEnvironmentsForUpstream();
+                loadEnvironmentsForUpstreamFilter();
+            }
+            if (tabId === 'apis') {
+                loadEnvironmentsForApi();
+                loadApis();
+            }
+            if (tabId === 'deployment') {
+                loadApisForDeployment();
+            }
+        }
+        
+        showNotification('success', 'Organization Selected', 
+            `Organization "${selector.options[selector.selectedIndex].text}" is now active`);
+    }
+}
+
+// Get current organization ID (from global selector)
+function getCurrentOrgId() {
+    if (!globalOrgId) {
+        showNotification('warning', 'No Organization Selected', 
+            'Please select an organization from the top right corner');
+        return null;
+    }
+    return globalOrgId;
+}
 
 // ===== TAB MANAGEMENT =====
 function showTab(tabName, targetButton) {
@@ -29,8 +76,15 @@ function showTab(tabName, targetButton) {
     // Auto-load data when switching tabs
     if (tabName === 'organizations') loadOrganizations();
     if (tabName === 'environments') loadEnvironments();
-    if (tabName === 'upstreams') loadUpstreams();
-    if (tabName === 'apis') loadApis();
+    if (tabName === 'upstreams') {
+        loadEnvironmentsForUpstream();
+        loadEnvironmentsForUpstreamFilter();
+    }
+    if (tabName === 'apis') {
+        loadEnvironmentsForApi();
+        loadApis();
+    }
+    if (tabName === 'deployment') loadApisForDeployment();
 }
 
 // ===== ORGANIZATIONS =====
@@ -65,7 +119,7 @@ async function loadOrganizations() {
         const orgs = await response.json();
         
         displayOrganizations(orgs);
-        updateOrgDropdowns(orgs);
+        updateGlobalOrgSelector(orgs);
     } catch (error) {
         console.error('Error loading organizations:', error);
     }
@@ -82,23 +136,26 @@ function displayOrganizations(orgs) {
     `).join('');
 }
 
-function updateOrgDropdowns(orgs) {
-    const dropdowns = ['envOrgId', 'envOrgFilter', 'upstreamOrgId', 'upstreamOrgFilter', 
-                       'apiOrgId', 'apiOrgFilter', 'deployOrgId'];
+function updateGlobalOrgSelector(orgs) {
+    const selector = document.getElementById('globalOrgSelector');
+    const savedOrgId = localStorage.getItem('selectedOrgId');
     
-    dropdowns.forEach(id => {
-        const select = document.getElementById(id);
-            const currentValue = select.value;
-            select.innerHTML = '<option value="">Select Organization</option>' +
-            orgs.map(org => `<option value="${org.id}">${org.name}</option>`).join('');
-            if (currentValue) select.value = currentValue;
-    });
+    selector.innerHTML = '<option value="">Select Organization</option>' +
+        orgs.map(org => `<option value="${org.id}">${org.name}</option>`).join('');
+    
+    // Restore previously selected org
+    if (savedOrgId && orgs.some(org => org.id === savedOrgId)) {
+        selector.value = savedOrgId;
+        globalOrgId = savedOrgId;
+    }
 }
 
 // ===== ENVIRONMENTS =====
 document.getElementById('createEnvForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const orgId = document.getElementById('envOrgId').value;
+    const orgId = getCurrentOrgId();
+    if (!orgId) return;
+    
     const name = document.getElementById('envName').value;
     const description = document.getElementById('envDescription').value;
     const apisixAdminUrl = document.getElementById('envApisixUrl').value;
@@ -112,22 +169,24 @@ document.getElementById('createEnvForm').addEventListener('submit', async (e) =>
         });
         
         if (response.ok) {
-            alert('Environment created successfully!');
+            showNotification('success', 'Environment Created', `Environment "${name}" created successfully`);
             e.target.reset();
+            document.getElementById('envActive').checked = true;
             loadEnvironments();
         } else {
             const error = await response.text();
-            alert('Failed to create environment: ' + error);
+            showNotification('error', 'Creation Failed', error);
         }
     } catch (error) {
-        alert('Error: ' + error.message);
+        showNotification('error', 'Error', error.message);
     }
 });
 
 async function loadEnvironments() {
-    const orgId = document.getElementById('envOrgFilter').value;
+    const orgId = getCurrentOrgId();
     if (!orgId) {
-        document.getElementById('envsList').innerHTML = '<p>Please select an organization</p>';
+        document.getElementById('envsList').innerHTML = 
+            '<p class="info-text">Please select an organization from the top right corner</p>';
         return;
     }
     
@@ -136,9 +195,24 @@ async function loadEnvironments() {
         environments = await response.json();
         
         displayEnvironments(environments);
+        updateEnvironmentDropdowns(environments);
     } catch (error) {
         console.error('Error loading environments:', error);
     }
+}
+
+function updateEnvironmentDropdowns(envs) {
+    const dropdowns = ['upstreamEnvId', 'upstreamEnvFilter'];
+    
+    dropdowns.forEach(id => {
+        const select = document.getElementById(id);
+        if (select) {
+            const currentValue = select.value;
+            select.innerHTML = '<option value="">Select Environment</option>' +
+                envs.map(env => `<option value="${env.id}">${env.name}</option>`).join('');
+            if (currentValue) select.value = currentValue;
+        }
+    });
 }
 
 function displayEnvironments(envs) {
@@ -156,14 +230,20 @@ function displayEnvironments(envs) {
 
 // ===== UPSTREAMS (Environment-Scoped) =====
 async function loadEnvironmentsForUpstream() {
-    const orgId = document.getElementById('upstreamOrgId').value;
-    if (!orgId) return;
+    const orgId = getCurrentOrgId();
+    const select = document.getElementById('upstreamEnvId');
+    
+    if (!select) return; // Element not in DOM (wrong tab)
+    
+    if (!orgId) {
+        select.innerHTML = '<option value="">Select org first</option>';
+        return;
+    }
     
     try {
         const response = await fetch(`${API_BASE}/organizations/${orgId}/environments`);
         const envs = await response.json();
         
-        const select = document.getElementById('upstreamEnvId');
         select.innerHTML = '<option value="">Select Environment</option>' +
             envs.map(env => `<option value="${env.id}">${env.name}</option>`).join('');
     } catch (error) {
@@ -172,10 +252,16 @@ async function loadEnvironmentsForUpstream() {
 }
 
 async function loadEnvironmentsForUpstreamFilter() {
-    const orgId = document.getElementById('upstreamOrgFilter').value;
+    const orgId = getCurrentOrgId();
+    const select = document.getElementById('upstreamEnvFilter');
+    const list = document.getElementById('upstreamsList');
+    
+    if (!select || !list) return; // Elements not in DOM (wrong tab)
+    
     if (!orgId) {
-        document.getElementById('upstreamEnvFilter').innerHTML = '<option value="">Select Environment</option>';
-        document.getElementById('upstreamsList').innerHTML = '';
+        select.innerHTML = '<option value="">Select Environment</option>';
+        list.innerHTML = 
+            '<p class="info-text">Please select an organization from the top right corner</p>';
         return;
     }
     
@@ -183,7 +269,6 @@ async function loadEnvironmentsForUpstreamFilter() {
         const response = await fetch(`${API_BASE}/organizations/${orgId}/environments`);
         const envs = await response.json();
         
-        const select = document.getElementById('upstreamEnvFilter');
         select.innerHTML = '<option value="">Select Environment</option>' +
             envs.map(env => `<option value="${env.id}">${env.name}</option>`).join('');
     } catch (error) {
@@ -193,7 +278,9 @@ async function loadEnvironmentsForUpstreamFilter() {
 
 document.getElementById('createUpstreamForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const orgId = document.getElementById('upstreamOrgId').value;
+    const orgId = getCurrentOrgId();
+    if (!orgId) return;
+    
     const envId = document.getElementById('upstreamEnvId').value;
     const name = document.getElementById('upstreamName').value;
     const description = document.getElementById('upstreamDescription').value;
@@ -208,24 +295,31 @@ document.getElementById('createUpstreamForm').addEventListener('submit', async (
         });
         
         if (response.ok) {
-            alert('Upstream created successfully in APISIX!');
+            showNotification('success', 'Upstream Created', `Upstream "${name}" created successfully in APISIX`);
             e.target.reset();
             loadUpstreams();
         } else {
             const error = await response.text();
-            alert('Failed to create upstream: ' + error);
+            showNotification('error', 'Creation Failed', error);
         }
     } catch (error) {
-        alert('Error: ' + error.message);
+        showNotification('error', 'Error', error.message);
     }
 });
 
 async function loadUpstreams() {
-    const orgId = document.getElementById('upstreamOrgFilter').value;
+    const orgId = getCurrentOrgId();
     const envId = document.getElementById('upstreamEnvFilter').value;
     
-    if (!orgId || !envId) {
-        document.getElementById('upstreamsList').innerHTML = '<p>Please select organization and environment</p>';
+    if (!orgId) {
+        document.getElementById('upstreamsList').innerHTML = 
+            '<p class="info-text">Please select an organization from the top right corner</p>';
+        return;
+    }
+    
+    if (!envId) {
+        document.getElementById('upstreamsList').innerHTML = 
+            '<p class="info-text">Please select an environment</p>';
         return;
     }
     
@@ -278,9 +372,14 @@ async function deleteUpstream(orgId, envId, upstreamId) {
 
 // ===== APIs =====
 async function loadEnvironmentsForApi() {
-    const orgId = document.getElementById('apiOrgId').value;
+    const orgId = getCurrentOrgId();
+    const container = document.getElementById('environmentUpstreamsContainer');
+    
+    if (!container) return; // Element not in DOM (wrong tab)
+    
     if (!orgId) {
-        document.getElementById('environmentUpstreamsContainer').innerHTML = '';
+        container.innerHTML = 
+            '<p class="info-text">Please select an organization from the top right corner</p>';
         return;
     }
     
@@ -289,7 +388,6 @@ async function loadEnvironmentsForApi() {
         const envs = await response.json();
         
         // Display environment-upstream selection
-        const container = document.getElementById('environmentUpstreamsContainer');
         container.innerHTML = envs.map(env => `
             <div class="env-upstream-row">
                 <label>${env.name}:</label>
@@ -347,7 +445,9 @@ document.getElementById('createApiForm').addEventListener('submit', async (e) =>
 });
 
 async function createApi() {
-    const orgId = document.getElementById('apiOrgId').value;
+    const orgId = getCurrentOrgId();
+    if (!orgId) return;
+    
     const name = document.getElementById('apiName').value;
     const description = document.getElementById('apiDescription').value;
     
@@ -405,7 +505,9 @@ async function createApi() {
 }
 
 async function createRevision() {
-    const orgId = document.getElementById('apiOrgId').value;
+    const orgId = getCurrentOrgId();
+    if (!orgId) return;
+    
     const apiName = document.getElementById('apiName').value;
     const description = document.getElementById('apiDescription').value;
     
@@ -474,7 +576,9 @@ async function updateRevision() {
         return;
     }
     
-    const orgId = document.getElementById('apiOrgId').value;
+    const orgId = getCurrentOrgId();
+    if (!orgId) return;
+    
     const name = document.getElementById('apiName').value; // Get name even though field is disabled
     const description = document.getElementById('apiDescription').value;
     
@@ -541,9 +645,10 @@ function cancelEdit() {
 }
 
 async function loadApis() {
-    const orgId = document.getElementById('apiOrgFilter').value;
+    const orgId = getCurrentOrgId();
     if (!orgId) {
-        document.getElementById('apisList').innerHTML = '<p>Please select an organization</p>';
+        document.getElementById('apisList').innerHTML = 
+            '<p class="info-text">Please select an organization from the top right corner</p>';
         return;
     }
     
@@ -648,7 +753,6 @@ async function editRevision(orgId, revisionId) {
         
         // Populate form
         document.getElementById('editingRevisionId').value = revisionId;
-        document.getElementById('apiOrgId').value = orgId;
         await loadEnvironmentsForApi();
         
         document.getElementById('apiName').value = revision.name;
@@ -713,8 +817,15 @@ async function deleteRevision(orgId, revisionId) {
 
 // ===== DEPLOYMENT =====
 async function loadApisForDeployment() {
-    const orgId = document.getElementById('deployOrgId').value;
-    if (!orgId) return;
+    const orgId = getCurrentOrgId();
+    const select = document.getElementById('deployApiName');
+    
+    if (!select) return; // Element not in DOM (wrong tab)
+    
+    if (!orgId) {
+        select.innerHTML = '<option value="">Select org first</option>';
+        return;
+    }
     
     try {
         const response = await fetch(`${API_BASE}/organizations/${orgId}/apis`);
@@ -724,7 +835,6 @@ async function loadApisForDeployment() {
         // Extract unique API names
         const apiNames = data.apis ? Object.keys(data.apis) : [];
         
-        const select = document.getElementById('deployApiName');
         select.innerHTML = '<option value="">Select API</option>' +
             apiNames.map(name => `<option value="${name}">${name}</option>`).join('');
     } catch (error) {
@@ -733,10 +843,12 @@ async function loadApisForDeployment() {
 }
 
 async function loadApiRevisions() {
-    const orgId = document.getElementById('deployOrgId').value;
+    const orgId = getCurrentOrgId();
+    if (!orgId) return;
+    
     const apiName = document.getElementById('deployApiName').value;
     
-    if (!orgId || !apiName) return;
+    if (!apiName) return;
     
     try {
         // Use the specific endpoint for getting revisions of an API
@@ -753,10 +865,16 @@ async function loadApiRevisions() {
 
 async function loadDeploymentData(providedOrgId, providedRevisionId) {
     // Use provided params or fall back to form values
-    const orgId = providedOrgId || document.getElementById('deployOrgId').value;
+    const orgId = providedOrgId || getCurrentOrgId();
     const revisionId = providedRevisionId || document.getElementById('deployRevisionId').value;
     
-    if (!orgId || !revisionId) {
+    if (!orgId) {
+        document.getElementById('deploymentEnvironments').innerHTML = 
+            '<p class="info-text">Please select an organization from the top right corner</p>';
+        return;
+    }
+    
+    if (!revisionId) {
         document.getElementById('deploymentEnvironments').innerHTML = '';
         return;
     }
