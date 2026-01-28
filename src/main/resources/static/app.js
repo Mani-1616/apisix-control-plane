@@ -92,6 +92,16 @@ function showTab(tabName, targetButton) {
         loadEnvironmentsForFilter();
         loadSubscriptions();
     }
+    if (tabName === 'products') {
+        loadApisForProductSelection();
+        loadProducts();
+    }
+    if (tabName === 'product-subscriptions') {
+        loadDevelopersForProductSubscription();
+        loadEnvironmentsForProductSubscription();
+        loadProductsForSubscription();
+        loadProductSubscriptions();
+    }
     if (tabName === 'deployment') loadApisForDeployment();
 }
 
@@ -1666,6 +1676,398 @@ async function grantSubscription(orgId, subscriptionId, apiName) {
         if (response.ok) {
             showNotification('success', 'Access Granted', `Access to "${apiName}" granted successfully`);
             loadSubscriptions();
+        } else {
+            const error = await response.text();
+            showNotification('error', 'Failed', error);
+        }
+    } catch (error) {
+        showNotification('error', 'Error', error.message);
+    }
+}
+
+// ===== API PRODUCTS =====
+
+async function loadProducts() {
+    const orgId = getCurrentOrgId();
+    if (!orgId) {
+        document.getElementById('productsList').innerHTML = 
+            '<p class="info-text">Please select an organization from the top right corner</p>';
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/organizations/${orgId}/products`);
+        const products = await response.json();
+        
+        displayProducts(products, orgId);
+    } catch (error) {
+        console.error('Error loading products:', error);
+    }
+}
+
+function displayProducts(products, orgId) {
+    const list = document.getElementById('productsList');
+    
+    if (products.length === 0) {
+        list.innerHTML = '<p class="info-text">No products found. Create your first product above!</p>';
+        return;
+    }
+    
+    list.innerHTML = products.map(product => {
+        return `
+            <div class="card">
+                <h3>${product.displayName || product.name}</h3>
+                <p><strong>Name:</strong> ${product.name}</p>
+                <p><strong>APIs:</strong> ${product.apiNames.join(', ')}</p>
+                ${product.description ? `<p><strong>Description:</strong> ${product.description}</p>` : ''}
+                <p><strong>Created:</strong> ${new Date(product.createdAt).toLocaleString()}</p>
+                <div class="card-actions">
+                    <button onclick="deleteProduct('${orgId}', '${product.id}', '${product.name}', false)" 
+                            class="btn-danger">
+                        🗑️ Delete
+                    </button>
+                    <button onclick="deleteProduct('${orgId}', '${product.id}', '${product.name}', true)" 
+                            class="btn-danger" style="opacity: 0.8;">
+                        ⚠️ Force Delete
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function loadApisForProductSelection() {
+    const orgId = getCurrentOrgId();
+    if (!orgId) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/organizations/${orgId}/apis`);
+        const data = await response.json();
+        
+        const container = document.getElementById('productApisSelection');
+        if (!data.apis || Object.keys(data.apis).length === 0) {
+            container.innerHTML = '<p style="color: var(--text-secondary);">No APIs available</p>';
+            return;
+        }
+        
+        container.innerHTML = Object.keys(data.apis).map(apiName => `
+            <label style="display: block; padding: 5px 0;">
+                <input type="checkbox" class="product-api-checkbox" value="${apiName}">
+                ${apiName}
+            </label>
+        `).join('');
+    } catch (error) {
+        console.error('Error loading APIs:', error);
+        document.getElementById('productApisSelection').innerHTML = 
+            '<p style="color: var(--danger-color);">Failed to load APIs</p>';
+    }
+}
+
+document.getElementById('createProductForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const orgId = getCurrentOrgId();
+    if (!orgId) {
+        showNotification('error', 'Error', 'Please select an organization');
+        return;
+    }
+    
+    const selectedApis = Array.from(document.querySelectorAll('.product-api-checkbox:checked'))
+        .map(cb => cb.value);
+    
+    if (selectedApis.length === 0) {
+        showNotification('error', 'Validation Error', 'Please select at least one API');
+        return;
+    }
+    
+    const pluginConfig = document.getElementById('productPluginConfig').value.trim();
+    
+    // Validate plugin config JSON if provided
+    if (pluginConfig) {
+        try {
+            JSON.parse(pluginConfig);
+        } catch (error) {
+            showNotification('error', 'Invalid JSON', 'Plugin configuration must be valid JSON');
+            return;
+        }
+    }
+    
+    const productData = {
+        name: document.getElementById('productName').value,
+        displayName: document.getElementById('productDisplayName').value,
+        description: document.getElementById('productDescription').value,
+        apiNames: selectedApis,
+        pluginConfig: pluginConfig || null
+    };
+    
+    try {
+        const response = await fetch(`${API_BASE}/organizations/${orgId}/products`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(productData)
+        });
+        
+        if (response.ok) {
+            showNotification('success', 'Product Created', 'Product created successfully!');
+            document.getElementById('createProductForm').reset();
+            loadApisForProductSelection();
+            loadProducts();
+        } else {
+            const error = await response.text();
+            showNotification('error', 'Failed', error);
+        }
+    } catch (error) {
+        showNotification('error', 'Error', error.message);
+    }
+});
+
+async function deleteProduct(orgId, productId, productName, force) {
+    const message = force 
+        ? `FORCE DELETE product "${productName}"? This will:\n- Delete ALL subscriptions (from MongoDB and APISIX)\n- Delete ALL consumer groups (from APISIX)\n- Delete the product (from MongoDB)\n\nThis action cannot be undone!`
+        : `Delete product "${productName}"?\n\nNote: This will fail if there are active subscriptions. Use Force Delete to remove all subscriptions.`;
+    
+    if (!confirm(message)) return;
+    
+    try {
+        const url = `${API_BASE}/organizations/${orgId}/products/${productId}${force ? '?force=true' : ''}`;
+        const response = await fetch(url, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            showNotification('success', 'Deleted', `Product deleted successfully${force ? ' (with all subscriptions)' : ''}!`);
+            loadProducts();
+            if (force) {
+                // Also refresh product subscriptions if on that tab
+                const prodSubList = document.getElementById('productSubscriptionsList');
+                if (prodSubList) {
+                    loadProductSubscriptions();
+                }
+            }
+        } else {
+            const errorData = await response.json();
+            showNotification('error', 'Failed', errorData.message || 'Failed to delete product');
+        }
+    } catch (error) {
+        showNotification('error', 'Error', error.message);
+    }
+}
+
+// ===== PRODUCT SUBSCRIPTIONS =====
+
+async function loadProductSubscriptions() {
+    const orgId = getCurrentOrgId();
+    if (!orgId) {
+        document.getElementById('productSubscriptionsList').innerHTML = 
+            '<p class="info-text">Please select an organization from the top right corner</p>';
+        return;
+    }
+    
+    const developerId = document.getElementById('prodSubFilterDeveloperId')?.value || '';
+    const envId = document.getElementById('prodSubFilterEnvId')?.value || '';
+    
+    try {
+        let url = `${API_BASE}/organizations/${orgId}/product-subscriptions`;
+        
+        const params = new URLSearchParams();
+        if (developerId) {
+            params.append('developerId', developerId);
+        }
+        if (envId) {
+            params.append('envId', envId);
+        }
+        
+        if (params.toString()) {
+            url += `?${params.toString()}`;
+        }
+        
+        const response = await fetch(url);
+        const subscriptions = await response.json();
+        
+        displayProductSubscriptions(subscriptions, orgId);
+    } catch (error) {
+        console.error('Error loading product subscriptions:', error);
+    }
+}
+
+function displayProductSubscriptions(subscriptions, orgId) {
+    const list = document.getElementById('productSubscriptionsList');
+    
+    if (subscriptions.length === 0) {
+        list.innerHTML = '<p class="info-text">No product subscriptions found.</p>';
+        return;
+    }
+    
+    list.innerHTML = subscriptions.map(sub => {
+        const statusClass = sub.status === 'ACTIVE' ? 'success' : 
+                          sub.status === 'REVOKED' ? 'danger' : 'warning';
+        
+        return `
+            <div class="card">
+                <h3>Product Subscription</h3>
+                <p><strong>Product ID:</strong> ${sub.productId}</p>
+                <p><strong>Developer ID:</strong> ${sub.developerId}</p>
+                <p><strong>Environment ID:</strong> ${sub.envId}</p>
+                <p><strong>Consumer ID:</strong> ${sub.consumerId}</p>
+                <p><strong>Consumer Group:</strong> ${sub.consumerGroupId}</p>
+                <p><strong>API Key:</strong> <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 4px;">${sub.apiKey}</code></p>
+                <p><strong>Status:</strong> <span class="badge badge-${statusClass}">${sub.status}</span></p>
+                <p><strong>Created:</strong> ${new Date(sub.createdAt).toLocaleString()}</p>
+                <div class="card-actions">
+                    ${sub.status === 'ACTIVE' ? `
+                        <button onclick="revokeProductSubscription('${orgId}', '${sub.id}')" 
+                                class="btn-danger">
+                            🚫 Revoke Access
+                        </button>
+                    ` : ''}
+                    ${sub.status === 'REVOKED' ? `
+                        <button onclick="grantProductSubscription('${orgId}', '${sub.id}')" 
+                                class="btn-primary">
+                            ✅ Grant Access
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function loadDevelopersForProductSubscription() {
+    const orgId = getCurrentOrgId();
+    if (!orgId) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/organizations/${orgId}/developers`);
+        const developers = await response.json();
+        
+        const selects = [
+            document.getElementById('prodSubDeveloperId'),
+            document.getElementById('prodSubFilterDeveloperId')
+        ];
+        
+        selects.forEach(select => {
+            if (select) {
+                const currentValue = select.value;
+                select.innerHTML = '<option value="">Select Developer</option>' +
+                    developers.map(dev => `<option value="${dev.id}">${dev.name} (${dev.email})</option>`).join('');
+                if (currentValue) select.value = currentValue;
+            }
+        });
+    } catch (error) {
+        console.error('Error loading developers:', error);
+    }
+}
+
+async function loadEnvironmentsForProductSubscription() {
+    const orgId = getCurrentOrgId();
+    if (!orgId) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/organizations/${orgId}/environments`);
+        const environments = await response.json();
+        
+        const selects = [
+            document.getElementById('prodSubEnvId'),
+            document.getElementById('prodSubFilterEnvId')
+        ];
+        
+        selects.forEach(select => {
+            if (select) {
+                const currentValue = select.value;
+                select.innerHTML = '<option value="">Select Environment</option>' +
+                    environments.map(env => `<option value="${env.id}">${env.name}</option>`).join('');
+                if (currentValue) select.value = currentValue;
+            }
+        });
+    } catch (error) {
+        console.error('Error loading environments:', error);
+    }
+}
+
+async function loadProductsForSubscription() {
+    const orgId = getCurrentOrgId();
+    if (!orgId) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/organizations/${orgId}/products`);
+        const products = await response.json();
+        
+        const select = document.getElementById('prodSubProductId');
+        if (select) {
+            select.innerHTML = '<option value="">Select Product</option>' +
+                products.map(prod => `<option value="${prod.id}">${prod.displayName || prod.name}</option>`).join('');
+        }
+    } catch (error) {
+        console.error('Error loading products:', error);
+    }
+}
+
+document.getElementById('createProductSubscriptionForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const orgId = getCurrentOrgId();
+    if (!orgId) {
+        showNotification('error', 'Error', 'Please select an organization');
+        return;
+    }
+    
+    const subscriptionData = {
+        developerId: document.getElementById('prodSubDeveloperId').value,
+        envId: document.getElementById('prodSubEnvId').value,
+        productId: document.getElementById('prodSubProductId').value
+    };
+    
+    try {
+        const response = await fetch(`${API_BASE}/organizations/${orgId}/product-subscriptions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(subscriptionData)
+        });
+        
+        if (response.ok) {
+            showNotification('success', 'Subscribed', 'Product subscription created successfully!');
+            document.getElementById('createProductSubscriptionForm').reset();
+            loadProductSubscriptions();
+        } else {
+            const error = await response.text();
+            showNotification('error', 'Failed', error);
+        }
+    } catch (error) {
+        showNotification('error', 'Error', error.message);
+    }
+});
+
+async function revokeProductSubscription(orgId, subscriptionId) {
+    if (!confirm('Revoke this product subscription? The developer will lose access to all APIs in this product.')) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/organizations/${orgId}/product-subscriptions/${subscriptionId}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            showNotification('success', 'Revoked', 'Product subscription revoked successfully');
+            loadProductSubscriptions();
+        } else {
+            const error = await response.text();
+            showNotification('error', 'Failed', error);
+        }
+    } catch (error) {
+        showNotification('error', 'Error', error.message);
+    }
+}
+
+async function grantProductSubscription(orgId, subscriptionId) {
+    if (!confirm('Grant access to this product? The developer will regain access.')) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/organizations/${orgId}/product-subscriptions/${subscriptionId}/grant`, {
+            method: 'PUT'
+        });
+        
+        if (response.ok) {
+            showNotification('success', 'Access Granted', 'Product subscription granted successfully');
+            loadProductSubscriptions();
         } else {
             const error = await response.text();
             showNotification('error', 'Failed', error);

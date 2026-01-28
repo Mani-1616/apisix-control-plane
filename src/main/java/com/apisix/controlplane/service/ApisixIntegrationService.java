@@ -231,7 +231,7 @@ public class ApisixIntegrationService {
      * Generate unique service ID (max 64 chars for APISIX)
      * Uses same ID across all environments for the same org+API
      */
-    private String generateServiceId(String orgId, String envId, String apiName) {
+    public String generateServiceId(String orgId, String envId, String apiName) {
         // Create a hash without envId to ensure same ID across environments
         String fullId = String.format("%s-%s", orgId, apiName);
         String hash = Integer.toHexString(fullId.hashCode());
