@@ -11,7 +11,7 @@
         <header>
             <div class="header-content">
                 <div class="header-title">
-                    <h1>🚀 APISIX Control Plane</h1>
+                    <h1>APISIX Control Plane</h1>
                     <p class="subtitle">Environment-Scoped API Gateway Management</p>
                 </div>
                 <div class="global-org-selector">
@@ -30,7 +30,8 @@
             <button class="tab-button active" onclick="showTab('organizations', this)">Organizations</button>
             <button class="tab-button" onclick="showTab('environments', this)">Environments</button>
             <button class="tab-button" onclick="showTab('upstreams', this)">Upstreams</button>
-            <button class="tab-button" onclick="showTab('apis', this)">APIs</button>
+            <button class="tab-button" onclick="showTab('services-overview', this)">Services Overview</button>
+            <button class="tab-button" onclick="showTab('services', this)">Services</button>
             <button class="tab-button" onclick="showTab('developers', this)">Developers</button>
             <button class="tab-button" onclick="showTab('subscriptions', this)">API Subscriptions</button>
             <button class="tab-button" onclick="showTab('products', this)">API Products</button>
@@ -48,10 +49,9 @@
                     <button type="submit">Create Organization</button>
                 </form>
             </div>
-
             <div class="section">
                 <h2>Organizations</h2>
-                <button onclick="loadOrganizations()" class="refresh-btn">🔄 Refresh</button>
+                <button onclick="loadOrganizations()" class="refresh-btn">Refresh</button>
                 <div id="orgsList" class="list"></div>
             </div>
         </div>
@@ -71,86 +71,91 @@
                     <button type="submit">Create Environment</button>
                 </form>
             </div>
-
             <div class="section">
                 <h2>Environments</h2>
-                <button onclick="loadEnvironments()" class="refresh-btn">🔄 Refresh</button>
+                <button onclick="loadEnvironments()" class="refresh-btn">Refresh</button>
                 <div id="envsList" class="list"></div>
             </div>
         </div>
 
-        <!-- Upstreams Tab (Environment-Scoped) -->
+        <!-- Upstreams Tab -->
         <div id="upstreams" class="tab-content">
             <div class="section">
                 <h2>Create Upstream</h2>
-                <p class="info-text">💡 Upstreams are environment-specific and created immediately in APISIX</p>
+                <p class="info-text">Upstreams are environment-specific and created immediately in APISIX</p>
                 <form id="createUpstreamForm" class="form">
                     <select id="upstreamEnvId" required>
                         <option value="">Select Environment</option>
                     </select>
                     <input type="text" id="upstreamName" placeholder="Upstream Name (unique in environment)" required>
-                    <input type="text" id="upstreamDescription" placeholder="Description">
-                    <input type="text" id="upstreamTargetUrl" placeholder="Target URL (e.g., https://qa-api.example.com)" required>
-                    <select id="upstreamType">
-                        <option value="roundrobin">Round Robin</option>
-                        <option value="chash">Consistent Hash</option>
-                        <option value="least_conn">Least Connections</option>
-                    </select>
+                    <textarea id="upstreamSpecification" placeholder='Upstream spec JSON, e.g., {"type":"roundrobin","scheme":"https","nodes":{"api.example.com:443":1},"pass_host":"node"}' rows="4" required></textarea>
                     <button type="submit">Create Upstream</button>
                 </form>
             </div>
-
             <div class="section">
                 <h2>Upstreams by Environment</h2>
                 <select id="upstreamEnvFilter" onchange="loadUpstreams()">
                     <option value="">Select Environment</option>
                 </select>
-                <button onclick="loadUpstreams()" class="refresh-btn">🔄 Refresh</button>
+                <button onclick="loadUpstreams()" class="refresh-btn">Refresh</button>
                 <div id="upstreamsList" class="list"></div>
             </div>
         </div>
 
-        <!-- APIs Tab -->
-        <div id="apis" class="tab-content">
+        <!-- Services Overview Tab -->
+        <div id="services-overview" class="tab-content">
             <div class="section">
-                <h2 id="apiFormTitle">Create API / Revision</h2>
-                <form id="createApiForm" class="form">
+                <h2>Services Overview</h2>
+                <div class="filter-row">
+                    <button onclick="loadServicesOverview()" class="refresh-btn">Refresh</button>
+                </div>
+                <div id="servicesOverviewList" class="list"></div>
+                <div id="overviewPagination" class="pagination"></div>
+            </div>
+        </div>
+
+        <!-- Services & Revisions Tab -->
+        <div id="services" class="tab-content">
+            <div class="section">
+                <h2>Create Service</h2>
+                <form id="createServiceForm" class="form">
+                    <input type="text" id="serviceName" placeholder="Service Name" required>
+                    <input type="text" id="serviceDisplayName" placeholder="Display Name">
+                    <button type="submit">Create Service</button>
+                </form>
+            </div>
+
+            <div class="section">
+                <h2 id="revisionFormTitle">Create Revision</h2>
+                <form id="createRevisionForm" class="form">
                     <input type="hidden" id="editingRevisionId" value="">
-                    <input type="text" id="apiName" placeholder="API Name" required>
-                    <input type="text" id="apiDescription" placeholder="Description">
-                    
+                    <select id="revisionServiceId" required>
+                        <option value="">Select Service</option>
+                    </select>
                     <h3>Service-Level APISIX Plugins (Optional)</h3>
-                    <p class="info-text">💡 Configure APISIX plugins for the entire service (applies to all routes)</p>
+                    <p class="info-text">Configure APISIX plugins for the entire service (applies to all routes)</p>
                     <textarea id="servicePlugins" placeholder='Enter JSON config, e.g., {"limit-count": {"count": 100, "time_window": 60}}' rows="4"></textarea>
-                    <small class="help-text">Leave empty if no service-level plugins needed</small>
-                    
+
                     <h3>Environment-Specific Upstreams</h3>
-                    <p class="info-text">💡 Select upstream for each environment (optional, can be set later during deployment)</p>
+                    <p class="info-text">Select upstream for each environment (optional, can be set during deployment)</p>
                     <div id="environmentUpstreamsContainer"></div>
-                    
+
                     <h3>Routes</h3>
                     <div id="routesContainer"></div>
                     <button type="button" onclick="addRoute()">+ Add Route</button>
-                    
+
                     <div class="form-actions">
                         <div id="createButtons" class="button-group-row">
                             <div class="button-group">
-                                <button type="submit">Create New API</button>
-                                <div class="help-text">Use this for a brand new API (first time)</div>
-                            </div>
-                            <div class="button-group">
-                                <button type="button" onclick="createRevision()">Create New Revision</button>
-                                <div class="help-text">Use this to add a new version to an existing API</div>
+                                <button type="submit">Create Revision</button>
                             </div>
                         </div>
                         <div id="editButtons" class="button-group-row" style="display: none;">
                             <div class="button-group">
                                 <button type="button" onclick="updateRevision()">Update Revision</button>
-                                <div class="help-text">Save changes to this DRAFT revision</div>
                             </div>
                             <div class="button-group">
                                 <button type="button" onclick="cancelEdit()" class="secondary-btn">Cancel</button>
-                                <div class="help-text">Discard changes and return to create mode</div>
                             </div>
                         </div>
                     </div>
@@ -158,9 +163,9 @@
             </div>
 
             <div class="section">
-                <h2>APIs</h2>
-                <button onclick="loadApis()" class="refresh-btn">🔄 Refresh</button>
-                <div id="apisList" class="list"></div>
+                <h2>Services & Revisions</h2>
+                <button onclick="loadServices()" class="refresh-btn">Refresh</button>
+                <div id="servicesList" class="list"></div>
             </div>
         </div>
 
@@ -174,10 +179,9 @@
                     <button type="submit">Add Developer</button>
                 </form>
             </div>
-
             <div class="section">
                 <h2>Developers</h2>
-                <button onclick="loadDevelopers()" class="refresh-btn">🔄 Refresh</button>
+                <button onclick="loadDevelopers()" class="refresh-btn">Refresh</button>
                 <div id="developersList" class="list"></div>
             </div>
         </div>
@@ -190,16 +194,15 @@
                     <select id="subDeveloperId" required>
                         <option value="">Select Developer</option>
                     </select>
-                    <select id="subEnvId" required onchange="loadApisForSubscription()">
+                    <select id="subEnvId" required onchange="loadServicesForSubscription()">
                         <option value="">Select Environment</option>
                     </select>
-                    <select id="subApiName" required>
-                        <option value="">Select API</option>
+                    <select id="subServiceId" required>
+                        <option value="">Select Service</option>
                     </select>
                     <button type="submit">Subscribe</button>
                 </form>
             </div>
-
             <div class="section">
                 <h2>Subscriptions</h2>
                 <div class="filter-row">
@@ -209,7 +212,7 @@
                     <select id="subFilterEnvId" onchange="loadSubscriptions()">
                         <option value="">All Environments</option>
                     </select>
-                    <button onclick="loadSubscriptions()" class="refresh-btn">🔄 Refresh</button>
+                    <button onclick="loadSubscriptions()" class="refresh-btn">Refresh</button>
                 </div>
                 <div id="subscriptionsList" class="list"></div>
             </div>
@@ -223,22 +226,21 @@
                     <input type="text" id="productName" placeholder="Product Name" required>
                     <input type="text" id="productDisplayName" placeholder="Display Name" required>
                     <textarea id="productDescription" placeholder="Description" rows="3"></textarea>
-                    <label>Select APIs for this product:</label>
-                    <div id="productApisSelection" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; margin-bottom: 10px;">
-                        <p style="color: var(--text-secondary); font-style: italic;">Loading APIs...</p>
+                    <label>Select Services for this product:</label>
+                    <div id="productServicesSelection" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; margin-bottom: 10px;">
+                        <p style="color: var(--text-secondary); font-style: italic;">Loading services...</p>
                     </div>
-                    
+
                     <h3>Consumer Group Plugins (Optional)</h3>
-                    <p class="info-text">💡 Configure APISIX plugins to be applied at consumer group level</p>
+                    <p class="info-text">Configure APISIX plugins to be applied at consumer group level</p>
                     <textarea id="productPluginConfig" placeholder='Enter JSON config, e.g., {"limit-count": {"count": 100, "time_window": 60}}' rows="4"></textarea>
-                    
+
                     <button type="submit">Create Product</button>
                 </form>
             </div>
-
             <div class="section">
                 <h2>Products</h2>
-                <button onclick="loadProducts()" class="refresh-btn">🔄 Refresh</button>
+                <button onclick="loadProducts()" class="refresh-btn">Refresh</button>
                 <div id="productsList" class="list"></div>
             </div>
         </div>
@@ -260,7 +262,6 @@
                     <button type="submit">Subscribe to Product</button>
                 </form>
             </div>
-
             <div class="section">
                 <h2>Product Subscriptions</h2>
                 <div class="filter-row">
@@ -270,7 +271,7 @@
                     <select id="prodSubFilterEnvId" onchange="loadProductSubscriptions()">
                         <option value="">All Environments</option>
                     </select>
-                    <button onclick="loadProductSubscriptions()" class="refresh-btn">🔄 Refresh</button>
+                    <button onclick="loadProductSubscriptions()" class="refresh-btn">Refresh</button>
                 </div>
                 <div id="productSubscriptionsList" class="list"></div>
             </div>
@@ -281,13 +282,12 @@
             <div class="section">
                 <h2>Deploy / Undeploy Revision</h2>
                 <form id="deploymentForm" class="form">
-                    <select id="deployApiName" required onchange="loadApiRevisions()">
-                        <option value="">Select API</option>
+                    <select id="deployServiceId" required onchange="loadServiceRevisions()">
+                        <option value="">Select Service</option>
                     </select>
                     <select id="deployRevisionId" required onchange="loadDeploymentData()">
                         <option value="">Select Revision</option>
                     </select>
-                    
                     <div id="deploymentEnvironments"></div>
                 </form>
             </div>

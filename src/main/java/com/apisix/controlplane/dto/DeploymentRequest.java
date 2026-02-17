@@ -1,20 +1,19 @@
 package com.apisix.controlplane.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import lombok.Data;
 
 import java.util.List;
-import java.util.Map;
 
 @Data
 public class DeploymentRequest {
-    
+
     /**
-     * Map of environment ID to upstream ID
-     * Must be provided for environments being deployed to
-     * Key: environmentId, Value: upstreamId
+     * Environment-to-upstream mappings.
+     * Must be provided for environments being deployed to.
      */
-    private Map<String, String> environmentUpstreams;
+    private List<@Valid EnvironmentUpstreamMapping> environmentUpstreams;
     
     /**
      * List of environment IDs to deploy to or undeploy from

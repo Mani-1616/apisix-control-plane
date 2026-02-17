@@ -1,0 +1,249 @@
+{
+  "info": {
+    "name": "APISIX Control Plane",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "orgId", "value": "org-1" },
+    { "key": "envId", "value": "env-1" },
+    { "key": "serviceId", "value": "svc-1" },
+    { "key": "revisionId", "value": "rev-1" },
+    { "key": "upstreamId", "value": "ups-1" }
+  ],
+  "item": [
+    {
+      "name": "Upstream",
+      "item": [
+        {
+          "name": "List Upstreams by Environment",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/orgs/{{orgId}}/envs/{{envId}}/upstreams",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orgs", "{{orgId}}", "envs", "{{envId}}", "upstreams"]
+            }
+          }
+        },
+        {
+          "name": "Get Upstream by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/orgs/{{orgId}}/envs/{{envId}}/upstreams/{{upstreamId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orgs", "{{orgId}}", "envs", "{{envId}}", "upstreams", "{{upstreamId}}"]
+            }
+          }
+        },
+        {
+          "name": "Create Upstream",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/orgs/{{orgId}}/envs/{{envId}}/upstreams",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orgs", "{{orgId}}", "envs", "{{envId}}", "upstreams"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"my-upstream\",\n  \"specification\": {\n    \"type\": \"roundrobin\",\n    \"scheme\": \"http\",\n    \"nodes\": {\n      \"127.0.0.1:8081\": 1\n    },\n    \"retries\": 3,\n    \"timeout\": {\n      \"connect\": 6,\n      \"send\": 6,\n      \"read\": 6\n    }\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Upstream",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/orgs/{{orgId}}/envs/{{envId}}/upstreams/{{upstreamId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orgs", "{{orgId}}", "envs", "{{envId}}", "upstreams", "{{upstreamId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Service",
+      "item": [
+        {
+          "name": "List Services",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/orgs/{{orgId}}/services",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orgs", "{{orgId}}", "services"]
+            }
+          }
+        },
+        {
+          "name": "Get Service by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/orgs/{{orgId}}/services/{{serviceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orgs", "{{orgId}}", "services", "{{serviceId}}"]
+            }
+          }
+        },
+        {
+          "name": "Create Service",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/orgs/{{orgId}}/services",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orgs", "{{orgId}}", "services"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"my-service\",\n  \"displayName\": \"My Service\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Service",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/orgs/{{orgId}}/services/{{serviceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orgs", "{{orgId}}", "services", "{{serviceId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Service Revision",
+      "item": [
+        {
+          "name": "List Revisions",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/orgs/{{orgId}}/services/{{serviceId}}/revisions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orgs", "{{orgId}}", "services", "{{serviceId}}", "revisions"]
+            }
+          }
+        },
+        {
+          "name": "Get Revision by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/orgs/{{orgId}}/services/{{serviceId}}/revisions/{{revisionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orgs", "{{orgId}}", "services", "{{serviceId}}", "revisions", "{{revisionId}}"]
+            }
+          }
+        },
+        {
+          "name": "Create Revision",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/orgs/{{orgId}}/services/{{serviceId}}/revisions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orgs", "{{orgId}}", "services", "{{serviceId}}", "revisions"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"environmentUpstreams\": {\n    \"{{envId}}\": \"{{upstreamId}}\"\n  },\n  \"serviceSpecification\": {\n    \"name\": \"my-apisix-service\",\n    \"plugins\": {\n      \"prometheus\": {}\n    },\n    \"enable_websocket\": false\n  },\n  \"routeSpecifications\": [\n    {\n      \"name\": \"my-route\",\n      \"uri\": \"/api/v1/*\",\n      \"methods\": [\"GET\", \"POST\", \"PUT\", \"DELETE\"],\n      \"status\": 1\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Revision",
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{baseUrl}}/api/orgs/{{orgId}}/services/{{serviceId}}/revisions/{{revisionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orgs", "{{orgId}}", "services", "{{serviceId}}", "revisions", "{{revisionId}}"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"environmentUpstreams\": {\n    \"{{envId}}\": \"{{upstreamId}}\"\n  },\n  \"serviceSpecification\": {\n    \"name\": \"my-apisix-service-updated\",\n    \"plugins\": {\n      \"prometheus\": {}\n    }\n  },\n  \"routeSpecifications\": [\n    {\n      \"name\": \"my-route-updated\",\n      \"uri\": \"/api/v2/*\",\n      \"methods\": [\"GET\", \"POST\"],\n      \"status\": 1\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Revision",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/orgs/{{orgId}}/services/{{serviceId}}/revisions/{{revisionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orgs", "{{orgId}}", "services", "{{serviceId}}", "revisions", "{{revisionId}}"]
+            }
+          }
+        },
+        {
+          "name": "Clone Revision",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/orgs/{{orgId}}/services/{{serviceId}}/revisions/{{revisionId}}/clone",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orgs", "{{orgId}}", "services", "{{serviceId}}", "revisions", "{{revisionId}}", "clone"]
+            }
+          }
+        },
+        {
+          "name": "Deploy Revision",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/orgs/{{orgId}}/services/{{serviceId}}/revisions/{{revisionId}}/deploy",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orgs", "{{orgId}}", "services", "{{serviceId}}", "revisions", "{{revisionId}}", "deploy"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"environmentIds\": [\"{{envId}}\"],\n  \"environmentUpstreams\": {\n    \"{{envId}}\": \"{{upstreamId}}\"\n  },\n  \"force\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "Undeploy Revision",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/orgs/{{orgId}}/services/{{serviceId}}/revisions/{{revisionId}}/undeploy",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orgs", "{{orgId}}", "services", "{{serviceId}}", "revisions", "{{revisionId}}", "undeploy"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"environmentIds\": [\"{{envId}}\"],\n  \"force\": false\n}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -3,6 +3,7 @@ package com.apisix.controlplane.controller;
 import com.apisix.controlplane.dto.CreateOrgRequest;
 import com.apisix.controlplane.entity.Organization;
 import com.apisix.controlplane.service.OrganizationService;
+import io.swagger.v3.oas.annotations.Hidden;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -12,8 +13,9 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/organizations")
+@RequestMapping("/api/orgs")
 @RequiredArgsConstructor
+@Hidden
 @CrossOrigin(origins = "*")
 public class OrganizationController {
 

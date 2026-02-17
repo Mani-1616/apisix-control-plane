@@ -1,5 +1,6 @@
 package com.apisix.controlplane.controller;
 
+import io.swagger.v3.oas.annotations.Hidden;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,6 +13,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1")
+@Hidden
 @CrossOrigin(origins = "*")
 public class HealthController {
 

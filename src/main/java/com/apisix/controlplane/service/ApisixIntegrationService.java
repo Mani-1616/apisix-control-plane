@@ -1,22 +1,25 @@
 package com.apisix.controlplane.service;
 
-import com.apisix.controlplane.entity.ApiRevision;
+import com.apisix.controlplane.apisix.model.RouteSpec;
+import com.apisix.controlplane.entity.Service;
 import com.apisix.controlplane.entity.Environment;
+import com.apisix.controlplane.entity.ServiceRevision;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
- * Service to integrate with APISIX Admin API
- * Handles deployment and undeployment of services and routes to APISIX instances
+ * Handles deployment and undeployment of services and routes to APISIX instances.
+ * Payloads are built from strongly-typed spec objects.
  */
-@Service
+@org.springframework.stereotype.Service
 @RequiredArgsConstructor
 @Slf4j
 public class ApisixIntegrationService {
@@ -28,121 +31,109 @@ public class ApisixIntegrationService {
     private int timeout;
 
     private final WebClient.Builder webClientBuilder;
+    private final ObjectMapper objectMapper;
 
     /**
-     * Deploy service and routes to APISIX environment
-     * Upstream is already created in APISIX (environment-scoped)
+     * Deploy service and routes to an APISIX environment.
      */
-    public void deployServiceAndRoutes(Environment environment, ApiRevision revision, 
-                                      com.apisix.controlplane.entity.Upstream upstream) {
-        log.info("Deploying service '{}' (revision {}) to APISIX at {} using upstream {}", 
-                revision.getName(), revision.getRevisionNumber(), environment.getApisixAdminUrl(), upstream.getApisixId());
+    public void deployServiceAndRoutes(Environment environment, ServiceRevision revision,
+                                       Service service,
+                                       com.apisix.controlplane.entity.Upstream upstream) {
+        log.info("Deploying service '{}' (Rev {}) to APISIX at {} using upstream {}",
+                service.getName(), revision.getRevisionNumber(),
+                environment.getApisixAdminUrl(), upstream.getApisixId());
 
-        WebClient webClient = webClientBuilder
-                .baseUrl(environment.getApisixAdminUrl())
-                .defaultHeader("X-API-KEY", adminKey)
-                .build();
-
+        WebClient webClient = buildWebClient(environment);
         String upstreamId = upstream.getApisixId();
 
-        // Step 1: Create/Update Service in APISIX (references upstream)
-        String serviceId = generateServiceId(environment.getOrgId(), environment.getId(), revision.getName());
-        Map<String, Object> servicePayload = buildServicePayload(upstreamId, revision);
-        
+        // Step 1: Create/Update APISIX Service (using Postgres service UUID as APISIX service ID)
+        String serviceId = service.getId();
+        Map<String, Object> servicePayload = buildServicePayload(upstreamId, revision, service);
+
         try {
             log.info("Creating service {} with payload: {}", serviceId, servicePayload);
-            String serviceResponse = webClient.put()
+            String response = webClient.put()
                     .uri("/apisix/admin/services/{id}", serviceId)
                     .bodyValue(servicePayload)
                     .retrieve()
                     .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
-                            response -> response.bodyToMono(String.class)
+                            resp -> resp.bodyToMono(String.class)
                                     .flatMap(body -> {
-                                        log.error("APISIX service creation failed with status {}: {}", response.statusCode(), body);
-                                        return Mono.error(new RuntimeException("APISIX returned " + response.statusCode() + ": " + body));
+                                        log.error("APISIX service creation failed: {} {}", resp.statusCode(), body);
+                                        return Mono.error(new RuntimeException("APISIX returned " + resp.statusCode() + ": " + body));
                                     }))
                     .bodyToMono(String.class)
                     .block();
-            
-            log.info("APISIX service creation response: {}", serviceResponse);
+            log.info("APISIX service response: {}", response);
         } catch (Exception e) {
-            log.error("Failed to create service in APISIX", e);
             throw new RuntimeException("Failed to create service in APISIX: " + e.getMessage(), e);
         }
 
-        // Step 3: Create/Update Routes in APISIX
-        int routeIndex = 0;
-        for (ApiRevision.RouteConfig routeConfig : revision.getRoutes()) {
-            String routeId = generateRouteId(environment.getOrgId(), environment.getId(), 
-                    revision.getName(), routeConfig.getName(), routeIndex++);
-            
-            Map<String, Object> routePayload = buildRoutePayload(serviceId, routeConfig);
-            
+        // Step 2: Create/Update Routes
+        List<RouteSpec> routeSpecs = revision.getRouteSpecifications();
+        for (int i = 0; i < routeSpecs.size(); i++) {
+            RouteSpec routeSpec = routeSpecs.get(i);
+            String routeName = routeSpec.getName() != null ? routeSpec.getName() : "route-" + i;
+            String routeId = generateRouteId(service.getOrgId(), environment.getId(),
+                    service.getName(), routeName, i);
+
+            Map<String, Object> routePayload = buildRoutePayload(routeSpec);
+
             try {
                 log.info("Creating route {} with payload: {}", routeId, routePayload);
-                String routeResponse = webClient.put()
+                String response = webClient.put()
                         .uri("/apisix/admin/routes/{id}", routeId)
                         .bodyValue(routePayload)
                         .retrieve()
                         .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
-                                response -> response.bodyToMono(String.class)
+                                resp -> resp.bodyToMono(String.class)
                                         .flatMap(body -> {
-                                            log.error("APISIX route creation failed with status {}: {}", response.statusCode(), body);
-                                            return Mono.error(new RuntimeException("APISIX returned " + response.statusCode() + ": " + body));
+                                            log.error("APISIX route creation failed: {} {}", resp.statusCode(), body);
+                                            return Mono.error(new RuntimeException("APISIX returned " + resp.statusCode() + ": " + body));
                                         }))
                         .bodyToMono(String.class)
                         .block();
-                
-                log.info("APISIX route creation response: {}", routeResponse);
+                log.info("APISIX route response: {}", response);
             } catch (Exception e) {
-                log.error("Failed to create route '{}' in APISIX", routeConfig.getName(), e);
-                throw new RuntimeException("Failed to create route '" + routeConfig.getName() + "' in APISIX: " + e.getMessage(), e);
+                throw new RuntimeException("Failed to create route '" + routeName + "' in APISIX: " + e.getMessage(), e);
             }
         }
 
-        log.info("Successfully deployed upstream, service, and {} routes to APISIX", revision.getRoutes().size());
+        log.info("Successfully deployed service and {} routes to APISIX", routeSpecs.size());
     }
 
     /**
-     * Undeploy service and routes from APISIX environment
-     * Upstream remains in APISIX (environment-scoped)
+     * Undeploy service and routes from an APISIX environment.
      */
-    public void undeployServiceAndRoutes(Environment environment, ApiRevision revision,
-                                        com.apisix.controlplane.entity.Upstream upstream) {
-        log.info("Undeploying service '{}' (revision {}) from APISIX at {}", 
-                revision.getName(), revision.getRevisionNumber(), environment.getApisixAdminUrl());
+    public void undeployServiceAndRoutes(Environment environment, ServiceRevision revision,
+                                         Service service,
+                                         com.apisix.controlplane.entity.Upstream upstream) {
+        log.info("Undeploying service '{}' (Rev {}) from APISIX at {}",
+                service.getName(), revision.getRevisionNumber(), environment.getApisixAdminUrl());
 
-        WebClient webClient = webClientBuilder
-                .baseUrl(environment.getApisixAdminUrl())
-                .defaultHeader("X-API-KEY", adminKey)
-                .build();
+        WebClient webClient = buildWebClient(environment);
+        String serviceId = service.getId();
 
-        String serviceId = generateServiceId(environment.getOrgId(), environment.getId(), revision.getName());
-
-        // Step 1: Delete Routes first (must be done before deleting service)
-        int routeIndex = 0;
+        // Delete routes first
+        List<RouteSpec> routeSpecs = revision.getRouteSpecifications();
         int deletedRoutes = 0;
-        for (ApiRevision.RouteConfig routeConfig : revision.getRoutes()) {
-            String routeId = generateRouteId(environment.getOrgId(), environment.getId(), 
-                    revision.getName(), routeConfig.getName(), routeIndex++);
-            
-            if (tryDeleteRoute(webClient, routeId, routeConfig.getName())) {
+        for (int i = 0; i < routeSpecs.size(); i++) {
+            RouteSpec routeSpec = routeSpecs.get(i);
+            String routeName = routeSpec.getName() != null ? routeSpec.getName() : "route-" + i;
+            String routeId = generateRouteId(service.getOrgId(), environment.getId(),
+                    service.getName(), routeName, i);
+
+            if (tryDeleteRoute(webClient, routeId, routeName)) {
                 deletedRoutes++;
             }
         }
 
-        log.info("Deleted {}/{} routes", deletedRoutes, revision.getRoutes().size());
+        log.info("Deleted {}/{} routes", deletedRoutes, routeSpecs.size());
 
-        // Give APISIX a moment to process route deletions
         if (deletedRoutes > 0) {
-            try {
-                Thread.sleep(500); // 500ms delay to ensure routes are fully deleted
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
+            try { Thread.sleep(500); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         }
 
-        // Step 2: Delete Service (only after routes are deleted)
         if (!tryDeleteService(webClient, serviceId)) {
             throw new RuntimeException("Failed to delete service from APISIX: " + serviceId);
         }
@@ -151,169 +142,84 @@ public class ApisixIntegrationService {
     }
 
     /**
-     * Build APISIX service payload (references upstream)
+     * Build APISIX service payload from the stored ServiceSpec.
+     * Sets upstream_id and adds a description fallback.
      */
-    private Map<String, Object> buildServicePayload(String upstreamId, ApiRevision revision) {
-        Map<String, Object> payload = new HashMap<>();
-        
-        // Reference the upstream object (not embedded)
-        payload.put("upstream_id", upstreamId);
-        
-        // Enable websocket if needed
-        payload.put("enable_websocket", false);
-        
-        // Add plugins if configured
-        if (revision.getServiceConfig() != null && 
-            revision.getServiceConfig().getPlugins() != null && 
-            !revision.getServiceConfig().getPlugins().isEmpty()) {
-            payload.put("plugins", revision.getServiceConfig().getPlugins());
-        }
-        
-        // Add description from metadata
-        if (revision.getServiceConfig() != null &&
-            revision.getServiceConfig().getMetadata() != null && 
-            !revision.getServiceConfig().getMetadata().isEmpty()) {
-            payload.put("desc", revision.getServiceConfig().getMetadata().toString());
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> buildServicePayload(String upstreamId, ServiceRevision revision, Service service) {
+        Map<String, Object> payload;
+
+        if (revision.getServiceSpecification() != null) {
+            // Clone the spec so we don't mutate the stored object
+            payload = objectMapper.convertValue(revision.getServiceSpecification(), LinkedHashMap.class);
         } else {
-            payload.put("desc", String.format("%s - Revision %d", revision.getName(), revision.getRevisionNumber()));
+            payload = new LinkedHashMap<>();
         }
-        
-        log.debug("Built service payload referencing upstream: {}", upstreamId);
-        
+
+        // Always set upstream_id (deployment-time field)
+        payload.put("upstream_id", upstreamId);
+
+        // Default description if not set
+        if (!payload.containsKey("desc") || payload.get("desc") == null) {
+            payload.put("desc", String.format("%s - Revision %d", service.getName(), revision.getRevisionNumber()));
+        }
+
         return payload;
     }
 
     /**
-     * Build APISIX route payload
+     * Build APISIX route payload from a RouteSpec.
+     * service_id is already stamped on the spec at revision creation time.
      */
-    private Map<String, Object> buildRoutePayload(String serviceId, ApiRevision.RouteConfig routeConfig) {
-        Map<String, Object> payload = new HashMap<>();
-        
-        // Link to service
-        payload.put("service_id", serviceId);
-        
-        // Route name
-        payload.put("name", routeConfig.getName());
-        
-        // HTTP methods
-        if (routeConfig.getMethods() != null && !routeConfig.getMethods().isEmpty()) {
-            payload.put("methods", routeConfig.getMethods());
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> buildRoutePayload(RouteSpec routeSpec) {
+        Map<String, Object> payload = objectMapper.convertValue(routeSpec, LinkedHashMap.class);
+
+        // Default status to enabled if not set
+        if (!payload.containsKey("status") || payload.get("status") == null) {
+            payload.put("status", 1);
         }
-        
-        // URIs - use 'uri' if single, 'uris' if multiple
-        if (routeConfig.getUris() != null && !routeConfig.getUris().isEmpty()) {
-            if (routeConfig.getUris().size() == 1) {
-                payload.put("uri", routeConfig.getUris().get(0));
-            } else {
-                payload.put("uris", routeConfig.getUris());
-            }
-        }
-        
-        // Enable the route (1 = enabled, 0 = disabled)
-        payload.put("status", 1);
-        
-        // Add route-specific plugins if configured
-        if (routeConfig.getPlugins() != null && !routeConfig.getPlugins().isEmpty()) {
-            payload.put("plugins", routeConfig.getPlugins());
-        }
-        
-        // Add description from metadata
-        if (routeConfig.getMetadata() != null && !routeConfig.getMetadata().isEmpty()) {
-            payload.put("desc", routeConfig.getMetadata().toString());
-        }
-        
-        log.debug("Built route payload: {}", payload);
-        
+
         return payload;
     }
 
-    /**
-     * Generate unique service ID (max 64 chars for APISIX)
-     * Uses same ID across all environments for the same org+API
-     */
-    public String generateServiceId(String orgId, String envId, String apiName) {
-        // Create a hash without envId to ensure same ID across environments
-        String fullId = String.format("%s-%s", orgId, apiName);
+    private String generateRouteId(String orgId, String envId, String serviceName, String routeName, int index) {
+        String fullId = String.format("%s-%s-%s-%d", orgId, serviceName, routeName, index);
         String hash = Integer.toHexString(fullId.hashCode());
-        
-        // Format: cp-svc-{hash}-{apiName-shortened}
-        String sanitizedApiName = apiName.replaceAll("[^a-zA-Z0-9-_]", "-").toLowerCase();
-        // Remove consecutive hyphens and trim
-        sanitizedApiName = sanitizedApiName.replaceAll("-+", "-").replaceAll("^-|-$", "");
-        
-        if (sanitizedApiName.length() > 20) {
-            sanitizedApiName = sanitizedApiName.substring(0, 20);
-        }
-        
-        String serviceId = String.format("cp-svc-%s-%s", hash, sanitizedApiName);
-        
-        // Ensure max 64 chars and clean ending
-        if (serviceId.length() > 64) {
-            serviceId = serviceId.substring(0, 64);
-        }
-        serviceId = serviceId.replaceAll("-$", ""); // Remove trailing hyphen if any
-        
-        log.debug("Generated service ID: {} (length: {}) - consistent across environments", 
-                  serviceId, serviceId.length());
-        return serviceId;
-    }
 
-    /**
-     * Generate unique route ID (max 64 chars for APISIX)
-     * Uses same ID across all environments for the same org+API+route
-     */
-    private String generateRouteId(String orgId, String envId, String apiName, String routeName, int index) {
-        // Create a hash without envId to ensure same ID across environments
-        String fullId = String.format("%s-%s-%s-%d", orgId, apiName, routeName, index);
-        String hash = Integer.toHexString(fullId.hashCode());
-        
-        // Format: cp-rt-{hash}-{routeName-shortened}
-        String sanitizedRouteName = routeName.replaceAll("[^a-zA-Z0-9-_]", "-").toLowerCase();
-        // Remove consecutive hyphens and trim
-        sanitizedRouteName = sanitizedRouteName.replaceAll("-+", "-").replaceAll("^-|-$", "");
-        
-        if (sanitizedRouteName.length() > 20) {
-            sanitizedRouteName = sanitizedRouteName.substring(0, 20);
+        String sanitized = routeName.replaceAll("[^a-zA-Z0-9-_]", "-").toLowerCase();
+        sanitized = sanitized.replaceAll("-+", "-").replaceAll("^-|-$", "");
+        if (sanitized.length() > 20) {
+            sanitized = sanitized.substring(0, 20);
         }
-        
-        String routeId = String.format("cp-rt-%s-%s-%d", hash, sanitizedRouteName, index);
-        
-        // Ensure max 64 chars and clean ending
+
+        String routeId = String.format("cp-rt-%s-%s-%d", hash, sanitized, index);
         if (routeId.length() > 64) {
             routeId = routeId.substring(0, 64);
         }
-        routeId = routeId.replaceAll("-$", ""); // Remove trailing hyphen if any
-        
-        log.debug("Generated route ID: {} (length: {}) - consistent across environments", 
-                  routeId, routeId.length());
+        routeId = routeId.replaceAll("-$", "");
+
         return routeId;
     }
 
-    /**
-     * Try to delete a route from APISIX
-     */
+    private WebClient buildWebClient(Environment environment) {
+        return webClientBuilder
+                .baseUrl(environment.getApisixAdminUrl())
+                .defaultHeader("X-API-KEY", adminKey)
+                .build();
+    }
+
     private boolean tryDeleteRoute(WebClient webClient, String routeId, String routeName) {
         try {
-            log.info("Attempting to delete route: {}", routeId);
-            String response = webClient.delete()
+            webClient.delete()
                     .uri("/apisix/admin/routes/{id}", routeId)
                     .retrieve()
-                    .onStatus(status -> status.value() == 404,
-                            clientResponse -> {
-                                log.warn("Route {} not found (404), may already be deleted", routeId);
-                                return Mono.empty();
-                            })
+                    .onStatus(status -> status.value() == 404, resp -> Mono.empty())
                     .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
-                            clientResponse -> clientResponse.bodyToMono(String.class)
-                                    .flatMap(body -> {
-                                        log.error("Failed to delete route {} - Status: {}, Response: {}", 
-                                                routeId, clientResponse.statusCode(), body);
-                                        return Mono.error(new RuntimeException("APISIX returned " + clientResponse.statusCode() + ": " + body));
-                                    }))
+                            resp -> resp.bodyToMono(String.class)
+                                    .flatMap(body -> Mono.error(new RuntimeException("APISIX: " + resp.statusCode() + ": " + body))))
                     .bodyToMono(String.class)
                     .block();
-            
-            log.info("Successfully deleted route: {} - Response: {}", routeId, response);
             return true;
         } catch (Exception e) {
             log.error("Failed to delete route '{}' ({}): {}", routeName, routeId, e.getMessage());
@@ -321,37 +227,21 @@ public class ApisixIntegrationService {
         }
     }
 
-    /**
-     * Try to delete a service from APISIX
-     */
     private boolean tryDeleteService(WebClient webClient, String serviceId) {
         try {
-            log.info("Attempting to delete service: {}", serviceId);
-            String response = webClient.delete()
+            webClient.delete()
                     .uri("/apisix/admin/services/{id}", serviceId)
                     .retrieve()
-                    .onStatus(status -> status.value() == 404,
-                            clientResponse -> {
-                                log.warn("Service {} not found (404), may already be deleted", serviceId);
-                                return Mono.empty();
-                            })
+                    .onStatus(status -> status.value() == 404, resp -> Mono.empty())
                     .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
-                            clientResponse -> clientResponse.bodyToMono(String.class)
-                                    .flatMap(body -> {
-                                        log.error("Failed to delete service {} - Status: {}, Response: {}", 
-                                                serviceId, clientResponse.statusCode(), body);
-                                        return Mono.error(new RuntimeException("APISIX returned " + clientResponse.statusCode() + ": " + body));
-                                    }))
+                            resp -> resp.bodyToMono(String.class)
+                                    .flatMap(body -> Mono.error(new RuntimeException("APISIX: " + resp.statusCode() + ": " + body))))
                     .bodyToMono(String.class)
                     .block();
-            
-            log.info("Successfully deleted service: {} - Response: {}", serviceId, response);
             return true;
         } catch (Exception e) {
             log.error("Failed to delete service {}: {}", serviceId, e.getMessage());
             return false;
         }
     }
-
 }
-

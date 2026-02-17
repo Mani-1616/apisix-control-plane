@@ -3,6 +3,7 @@ package com.apisix.controlplane.controller;
 import com.apisix.controlplane.dto.CreateProductRequest;
 import com.apisix.controlplane.entity.Product;
 import com.apisix.controlplane.service.ProductService;
+import io.swagger.v3.oas.annotations.Hidden;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,9 +14,10 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/organizations/{orgId}/products")
+@RequestMapping("/api/orgs/{orgId}/products")
 @RequiredArgsConstructor
 @Slf4j
+@Hidden
 @CrossOrigin(origins = "*")
 public class ProductController {
     

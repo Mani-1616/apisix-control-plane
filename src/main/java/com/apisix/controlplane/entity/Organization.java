@@ -1,14 +1,13 @@
 package com.apisix.controlplane.entity;
 
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.LastModifiedDate;
-import org.springframework.data.mongodb.core.index.Indexed;
-import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 
@@ -16,21 +15,25 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Document(collection = "organizations")
+@Entity
+@Table(name = "organizations")
+@EntityListeners(AuditingEntityListener.class)
 public class Organization {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
     private String id;
 
-    @Indexed(unique = true)
+    @Column(unique = true, nullable = false)
     private String name;
 
     private String description;
 
     @CreatedDate
+    @Column(name = "created_at")
     private LocalDateTime createdAt;
 
     @LastModifiedDate
+    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 }
-
