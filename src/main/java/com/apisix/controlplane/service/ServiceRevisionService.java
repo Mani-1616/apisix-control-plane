@@ -6,6 +6,8 @@ import com.apisix.controlplane.dto.DeploymentRequest;
 import com.apisix.controlplane.dto.DeploymentResponse;
 import com.apisix.controlplane.dto.PaginatedResponse;
 import com.apisix.controlplane.dto.EnvironmentUpstreamMapping;
+import com.apisix.controlplane.dto.UpdateRevisionSpecsRequest;
+import com.apisix.controlplane.dto.UpdateUpstreamBindingsRequest;
 import com.apisix.controlplane.dto.RevisionSummary;
 import com.apisix.controlplane.dto.ServiceRevisionResponse;
 import com.apisix.controlplane.dto.UpstreamBindingResponse;
@@ -29,6 +31,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -71,7 +74,7 @@ public class ServiceRevisionService {
                 .orgId(service.getOrgId())
                 .serviceId(serviceId)
                 .revisionNumber(nextRevisionNumber)
-                .state(RevisionState.DRAFT)
+                .state(RevisionState.INACTIVE)
                 .serviceSpecification(request.getServiceSpecification())
                 .routeSpecifications(request.getRouteSpecifications())
                 .build();
@@ -116,42 +119,59 @@ public class ServiceRevisionService {
     }
 
     @Transactional
-    public ServiceRevisionResponse updateRevision(String revisionId, CreateServiceRevisionRequest request) {
+    public ServiceRevisionResponse updateRevisionSpecs(String revisionId, UpdateRevisionSpecsRequest request) {
         ServiceRevision revision = findRevisionById(revisionId);
 
-        if (revision.getState() != RevisionState.DRAFT) {
-            throw new BusinessException("Only DRAFT revisions can be updated. Current state: " + revision.getState());
+        if (revision.getState() != RevisionState.INACTIVE) {
+            throw new BusinessException("Service and route specifications can only be updated for INACTIVE revisions. Current state: " + revision.getState());
         }
 
         if (request.getRouteSpecifications() == null || request.getRouteSpecifications().isEmpty()) {
             throw new BusinessException("At least one route specification is required");
         }
 
-        // Update upstream bindings if provided
-        if (request.getEnvironmentUpstreams() != null) {
-            for (EnvironmentUpstreamMapping mapping : request.getEnvironmentUpstreams()) {
-                String envId = mapping.getEnvironmentId();
-                String upstreamId = mapping.getUpstreamId();
-
-                environmentService.getEnvironmentById(envId);
-                var upstream = upstreamService.getUpstreamById(upstreamId);
-                if (!upstream.getEnvironmentId().equals(envId)) {
-                    throw new BusinessException("Upstream " + upstreamId + " does not belong to environment " + envId);
-                }
-
-                upsertUpstreamBinding(revision.getOrgId(), revision.getServiceId(), revisionId, envId, upstreamId);
-            }
-        }
-
-        // Stamp each route with the APISIX service_id (Postgres service UUID)
         stampServiceIdOnRoutes(request.getRouteSpecifications(), revision.getServiceId());
 
         revision.setServiceSpecification(request.getServiceSpecification());
         revision.setRouteSpecifications(request.getRouteSpecifications());
 
         ServiceRevision updated = revisionRepository.save(revision);
-        log.info("Revision {} updated", revisionId);
+        log.info("Revision {} specs updated", revisionId);
         return toResponse(updated);
+    }
+
+    @Transactional
+    public ServiceRevisionResponse updateUpstreamBindings(String revisionId, UpdateUpstreamBindingsRequest request) {
+        ServiceRevision revision = findRevisionById(revisionId);
+
+        // For ACTIVE revisions, only allow binding changes for non-deployed environments
+        Set<String> deployedEnvIds = Set.of();
+        if (revision.getState() == RevisionState.ACTIVE) {
+            deployedEnvIds = deploymentRepository.findByRevisionId(revisionId).stream()
+                    .map(Deployment::getEnvironmentId)
+                    .collect(Collectors.toSet());
+        }
+
+        for (EnvironmentUpstreamMapping mapping : request.getEnvironmentUpstreams()) {
+            String envId = mapping.getEnvironmentId();
+            String upstreamId = mapping.getUpstreamId();
+
+            if (deployedEnvIds.contains(envId)) {
+                throw new BusinessException("Cannot modify upstream binding for environment " + envId
+                        + " because the revision is currently deployed there. Undeploy first.");
+            }
+
+            environmentService.getEnvironmentById(envId);
+            var upstream = upstreamService.getUpstreamById(upstreamId);
+            if (!upstream.getEnvironmentId().equals(envId)) {
+                throw new BusinessException("Upstream " + upstreamId + " does not belong to environment " + envId);
+            }
+
+            upsertUpstreamBinding(revision.getOrgId(), revision.getServiceId(), revisionId, envId, upstreamId);
+        }
+
+        log.info("Revision {} upstream bindings updated", revisionId);
+        return toResponse(revision);
     }
 
     @Transactional
@@ -169,7 +189,7 @@ public class ServiceRevisionService {
                 .orgId(source.getOrgId())
                 .serviceId(source.getServiceId())
                 .revisionNumber(nextRevisionNumber)
-                .state(RevisionState.DRAFT)
+                .state(RevisionState.INACTIVE)
                 .serviceSpecification(source.getServiceSpecification())
                 .routeSpecifications(source.getRouteSpecifications())
                 .build();
@@ -207,8 +227,8 @@ public class ServiceRevisionService {
     public void deleteRevision(String revisionId) {
         ServiceRevision revision = findRevisionById(revisionId);
 
-        if (revision.getState() != RevisionState.DRAFT) {
-            throw new BusinessException("Only DRAFT revisions can be deleted. Current state: " + revision.getState());
+        if (revision.getState() != RevisionState.INACTIVE) {
+            throw new BusinessException("Only INACTIVE revisions can be deleted. Current state: " + revision.getState());
         }
 
         upstreamBindingRepository.deleteByRevisionId(revisionId);
@@ -221,92 +241,77 @@ public class ServiceRevisionService {
         ServiceRevision revision = findRevisionById(revisionId);
         Service service = apiServiceService.getServiceById(revision.getServiceId());
 
-        log.info("Deploying revision {} (Rev {}) of service '{}' to {} environment(s)",
-                revisionId, revision.getRevisionNumber(), service.getName(), request.getEnvironmentIds().size());
+        String envId = request.getEnvironmentId();
+        log.info("Deploying revision {} (Rev {}) of service '{}' to environment {}",
+                revisionId, revision.getRevisionNumber(), service.getName(), envId);
 
-        // Step 1: Upsert upstream bindings from overrides
-        if (request.getEnvironmentUpstreams() != null && !request.getEnvironmentUpstreams().isEmpty()) {
-            for (EnvironmentUpstreamMapping mapping : request.getEnvironmentUpstreams()) {
-                String envId = mapping.getEnvironmentId();
-                String upstreamId = mapping.getUpstreamId();
+        // Upstream bindings must be set beforehand via the update upstream bindings endpoint.
+        var environment = environmentService.getEnvironmentById(envId);
 
-                var upstream = upstreamService.getUpstreamById(upstreamId);
-                if (!upstream.getEnvironmentId().equals(envId)) {
-                    throw new BusinessException("Upstream does not belong to environment " + envId);
-                }
+        // Resolve upstream from UpstreamBinding (single source of truth)
+        UpstreamBinding binding = upstreamBindingRepository
+                .findByRevisionIdAndEnvironmentId(revisionId, envId)
+                .orElseThrow(() -> new BusinessException("Upstream not configured for environment: " + envId));
 
-                upsertUpstreamBinding(revision.getOrgId(), revision.getServiceId(), revisionId, envId, upstreamId);
+        var upstream = upstreamService.getUpstreamById(binding.getUpstreamId());
+
+        // Check for conflicting deployment (another revision deployed to same service+env)
+        Optional<Deployment> existingDeployment = deploymentRepository
+                .findByServiceIdAndEnvironmentId(revision.getServiceId(), envId);
+
+        if (existingDeployment.isPresent()) {
+            Deployment existing = existingDeployment.get();
+            if (existing.getRevisionId().equals(revisionId) && !request.isForce()) {
+                throw new BusinessException("Already deployed to environment " + envId + ". Use force to redeploy.");
             }
+
+            if (!request.isForce()) {
+                ServiceRevision otherRevision = findRevisionById(existing.getRevisionId());
+                throw new BusinessException(
+                        String.format("Another revision (Rev %d) is already deployed to environment '%s'. " +
+                                        "Undeploy it first or use force deploy.",
+                                otherRevision.getRevisionNumber(), environment.getName()));
+            }
+
+            // Force: auto-undeploy old revision
+            log.info("Force deploy: auto-undeploying revision {} from env {}", existing.getRevisionId(), envId);
+            ServiceRevision oldRevision = findRevisionById(existing.getRevisionId());
+            UpstreamBinding oldBinding = upstreamBindingRepository
+                    .findByRevisionIdAndEnvironmentId(existing.getRevisionId(), envId)
+                    .orElse(null);
+
+            if (oldBinding != null) {
+                var oldUpstream = upstreamService.getUpstreamById(oldBinding.getUpstreamId());
+                try {
+                    apisixIntegrationService.undeployServiceAndRoutes(environment, oldRevision, service, oldUpstream);
+                } catch (Exception e) {
+                    throw new BusinessException("Failed to auto-undeploy old revision: " + e.getMessage());
+                }
+            }
+
+            deploymentRepository.delete(existing);
+            recalculateState(oldRevision);
+            revisionRepository.save(oldRevision);
         }
 
-        // Step 2: Deploy to each environment
-        for (String envId : request.getEnvironmentIds()) {
-            var environment = environmentService.getEnvironmentById(envId);
-
-            // Resolve upstream from UpstreamBinding (single source of truth)
-            UpstreamBinding binding = upstreamBindingRepository
-                    .findByRevisionIdAndEnvironmentId(revisionId, envId)
-                    .orElseThrow(() -> new BusinessException("Upstream not configured for environment: " + envId));
-
-            var upstream = upstreamService.getUpstreamById(binding.getUpstreamId());
-
-            // Check for conflicting deployment (another revision deployed to same service+env)
-            Optional<Deployment> existingDeployment = deploymentRepository
-                    .findByServiceIdAndEnvironmentId(revision.getServiceId(), envId);
-
-            if (existingDeployment.isPresent()) {
-                Deployment existing = existingDeployment.get();
-                if (existing.getRevisionId().equals(revisionId) && !request.isForce()) {
-                    throw new BusinessException("Already deployed to environment " + envId + ". Use force to redeploy.");
-                }
-
-                if (!request.isForce()) {
-                    ServiceRevision otherRevision = findRevisionById(existing.getRevisionId());
-                    throw new BusinessException(
-                            String.format("Another revision (Rev %d) is already deployed to environment '%s'. " +
-                                            "Undeploy it first or use force deploy.",
-                                    otherRevision.getRevisionNumber(), environment.getName()));
-                }
-
-                // Force: auto-undeploy old revision
-                log.info("Force deploy: auto-undeploying revision {} from env {}", existing.getRevisionId(), envId);
-                ServiceRevision oldRevision = findRevisionById(existing.getRevisionId());
-                UpstreamBinding oldBinding = upstreamBindingRepository
-                        .findByRevisionIdAndEnvironmentId(existing.getRevisionId(), envId)
-                        .orElse(null);
-
-                if (oldBinding != null) {
-                    var oldUpstream = upstreamService.getUpstreamById(oldBinding.getUpstreamId());
-                    try {
-                        apisixIntegrationService.undeployServiceAndRoutes(environment, oldRevision, service, oldUpstream);
-                    } catch (Exception e) {
-                        throw new BusinessException("Failed to auto-undeploy old revision: " + e.getMessage());
-                    }
-                }
-
-                deploymentRepository.delete(existing);
-                recalculateState(oldRevision);
-            }
-
-            // Deploy to APISIX
-            try {
-                apisixIntegrationService.deployServiceAndRoutes(environment, revision, service, upstream);
-            } catch (Exception e) {
-                throw new BusinessException("Deployment failed for environment " + envId + ": " + e.getMessage());
-            }
-
-            // Create Deployment record
-            Deployment deployment = Deployment.builder()
-                    .orgId(revision.getOrgId())
-                    .serviceId(revision.getServiceId())
-                    .revisionId(revisionId)
-                    .environmentId(envId)
-                    .build();
-            deploymentRepository.save(deployment);
+        // Deploy to APISIX
+        try {
+            apisixIntegrationService.deployServiceAndRoutes(environment, revision, service, upstream);
+        } catch (Exception e) {
+            throw new BusinessException("Deployment failed for environment " + envId + ": " + e.getMessage());
         }
+
+        // Create Deployment record
+        Deployment deployment = Deployment.builder()
+                .orgId(revision.getOrgId())
+                .serviceId(revision.getServiceId())
+                .revisionId(revisionId)
+                .environmentId(envId)
+                .build();
+        deploymentRepository.save(deployment);
 
         // Update revision state
-        revision.setState(RevisionState.DEPLOYED);
+        revision.setState(RevisionState.ACTIVE);
         ServiceRevision saved = revisionRepository.save(revision);
 
         log.info("Deployment complete. Rev {} state: {}", revision.getRevisionNumber(), saved.getState());
@@ -318,20 +323,18 @@ public class ServiceRevisionService {
         ServiceRevision revision = findRevisionById(revisionId);
         Service service = apiServiceService.getServiceById(revision.getServiceId());
 
-        log.info("Undeploying revision {} (Rev {}) from {} environment(s)",
-                revisionId, revision.getRevisionNumber(), request.getEnvironmentIds().size());
+        String envId = request.getEnvironmentId();
+        log.info("Undeploying revision {} (Rev {}) from environment {}",
+                revisionId, revision.getRevisionNumber(), envId);
 
-        for (String envId : request.getEnvironmentIds()) {
-            var environment = environmentService.getEnvironmentById(envId);
+        var environment = environmentService.getEnvironmentById(envId);
 
-            Optional<Deployment> existingDeployment = deploymentRepository
-                    .findByServiceIdAndEnvironmentId(revision.getServiceId(), envId);
+        Optional<Deployment> existingDeployment = deploymentRepository
+                .findByServiceIdAndEnvironmentId(revision.getServiceId(), envId);
 
-            if (existingDeployment.isEmpty() || !existingDeployment.get().getRevisionId().equals(revisionId)) {
-                log.warn("Rev {} not deployed to env {}, skipping", revision.getRevisionNumber(), envId);
-                continue;
-            }
-
+        if (existingDeployment.isEmpty() || !existingDeployment.get().getRevisionId().equals(revisionId)) {
+            log.warn("Rev {} not deployed to env {}, skipping", revision.getRevisionNumber(), envId);
+        } else {
             // Resolve upstream from binding
             UpstreamBinding binding = upstreamBindingRepository
                     .findByRevisionIdAndEnvironmentId(revisionId, envId)
@@ -463,12 +466,10 @@ public class ServiceRevisionService {
      */
     private void recalculateState(ServiceRevision revision) {
         if (deploymentRepository.existsByRevisionId(revision.getId())) {
-            revision.setState(RevisionState.DEPLOYED);
-        } else if (revision.getState() == RevisionState.DEPLOYED) {
-            // Was deployed, now nothing left
-            revision.setState(RevisionState.UNDEPLOYED);
+            revision.setState(RevisionState.ACTIVE);
+        } else {
+            revision.setState(RevisionState.INACTIVE);
         }
-        // DRAFT stays DRAFT if never deployed
     }
 
     /**

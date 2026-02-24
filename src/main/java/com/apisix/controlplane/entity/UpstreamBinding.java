@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 /**
  * Maps a service revision to an upstream for a specific environment.
  * This is the single source of truth for which upstream a revision uses in each environment.
- * Created during revision setup, copied on clone, mutable while revision is in DRAFT state.
+ * Created during revision setup, copied on clone, mutable while revision is in INACTIVE state.
  * Also updated at deploy time if the user provides an upstream override.
  */
 @Data

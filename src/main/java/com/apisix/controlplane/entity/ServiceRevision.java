@@ -51,7 +51,7 @@ public class ServiceRevision {
 
     @Builder.Default
     @Enumerated(EnumType.STRING)
-    private RevisionState state = RevisionState.DRAFT;
+    private RevisionState state = RevisionState.INACTIVE;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "service_specification", columnDefinition = "jsonb")

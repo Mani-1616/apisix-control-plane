@@ -592,13 +592,6 @@ async function updateRevision() {
         }
     }
 
-    const environmentUpstreams = [];
-    document.querySelectorAll('#environmentUpstreamsContainer select').forEach(select => {
-        const envId = select.dataset.envId;
-        const upstreamId = select.value;
-        if (upstreamId) environmentUpstreams.push({ environmentId: envId, upstreamId });
-    });
-
     const routeSpecifications = [];
     let hasError = false;
     document.querySelectorAll('#routesContainer .route-item').forEach(routeDiv => {
@@ -634,24 +627,47 @@ async function updateRevision() {
     if (servicePlugins) serviceSpecification.plugins = servicePlugins;
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/revisions/${revisionId}`, {
+        // Step 1: Update specs
+        const specsResponse = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/revisions/${revisionId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                environmentUpstreams,
                 serviceSpecification: Object.keys(serviceSpecification).length > 0 ? serviceSpecification : null,
                 routeSpecifications
             })
         });
 
-        if (response.ok) {
-            showNotification('success', 'Revision Updated', 'Revision updated successfully');
-            cancelEdit();
-            loadServices();
-        } else {
-            const error = await response.text();
+        if (!specsResponse.ok) {
+            const error = await specsResponse.text();
             showNotification('error', 'Update Failed', error);
+            return;
         }
+
+        // Step 2: Update upstream bindings
+        const environmentUpstreams = [];
+        document.querySelectorAll('#environmentUpstreamsContainer select').forEach(select => {
+            const envId = select.dataset.envId;
+            const upstreamId = select.value;
+            if (upstreamId) environmentUpstreams.push({ environmentId: envId, upstreamId });
+        });
+
+        if (environmentUpstreams.length > 0) {
+            const bindingsResponse = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/revisions/${revisionId}/upstream-bindings`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ environmentUpstreams })
+            });
+
+            if (!bindingsResponse.ok) {
+                const error = await bindingsResponse.text();
+                showNotification('error', 'Upstream Bindings Update Failed', error);
+                return;
+            }
+        }
+
+        showNotification('success', 'Revision Updated', 'Revision updated successfully');
+        cancelEdit();
+        loadServices();
     } catch (error) {
         showNotification('error', 'Error', error.message);
     }
@@ -699,8 +715,7 @@ async function loadServices() {
                     `<span class="env-badge env-deployed">${dep.environmentName || dep.environmentId.substring(0, 8)}: DEPLOYED</span>`
                 ).join(' ');
 
-                const stateClass = revision.state === 'DRAFT' ? 'state-draft' :
-                    revision.state === 'DEPLOYED' ? 'state-deployed' : 'state-undeployed';
+                const stateClass = revision.state === 'ACTIVE' ? 'state-active' : 'state-inactive';
 
                 return `
                     <div class="revision-item">
@@ -713,7 +728,7 @@ async function loadServices() {
                         </div>
                         <div class="revision-actions">
                             <button class="action-btn clone-btn" onclick="cloneRevision('${orgId}', '${svc.id}', '${revision.id}', '${revision.revisionNumber}')" title="Clone">Clone</button>
-                            ${revision.state === 'DRAFT' ? `
+                            ${revision.state === 'INACTIVE' ? `
                                 <button class="action-btn edit-btn" onclick="editRevision('${orgId}', '${svc.id}', '${revision.id}')" title="Edit">Edit</button>
                                 <button class="action-btn delete-btn" onclick="deleteRevision('${orgId}', '${svc.id}', '${revision.id}')" title="Delete">Delete</button>
                             ` : ''}
@@ -748,7 +763,13 @@ async function editRevision(orgId, serviceId, revisionId) {
         if (!response.ok) throw new Error(await response.text());
         const revision = await response.json();
 
-        showTab('services');
+        // Switch tab without triggering data loads (we handle them below)
+        document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+        document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+        document.getElementById('services').classList.add('active');
+        const servicesBtn = Array.from(document.querySelectorAll('.tab-button'))
+            .find(btn => btn.onclick && btn.onclick.toString().includes("showTab('services'"));
+        if (servicesBtn) servicesBtn.classList.add('active');
 
         document.getElementById('editingRevisionId').value = revisionId;
         await loadEnvironmentsForRevision();
@@ -792,7 +813,7 @@ async function editRevision(orgId, serviceId, revisionId) {
 
         document.getElementById('createButtons').style.display = 'none';
         document.getElementById('editButtons').style.display = 'flex';
-        document.getElementById('revisionFormTitle').textContent = 'Edit DRAFT Revision';
+        document.getElementById('revisionFormTitle').textContent = 'Edit Inactive Revision';
     } catch (error) {
         console.error('Error loading revision:', error);
         alert('Error loading revision: ' + error.message);
@@ -800,7 +821,7 @@ async function editRevision(orgId, serviceId, revisionId) {
 }
 
 async function deleteRevision(orgId, serviceId, revisionId) {
-    if (!confirm('Are you sure you want to delete this DRAFT revision?')) return;
+    if (!confirm('Are you sure you want to delete this revision?')) return;
 
     try {
         const response = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/revisions/${revisionId}`, {
@@ -820,7 +841,7 @@ async function deleteRevision(orgId, serviceId, revisionId) {
 }
 
 async function cloneRevision(orgId, serviceId, revisionId, revisionNumber) {
-    if (!confirm(`Clone Revision ${revisionNumber}? This will create a new DRAFT revision with the same configuration.`)) return;
+    if (!confirm(`Clone Revision ${revisionNumber}? This will create a new INACTIVE revision with the same configuration.`)) return;
 
     try {
         const response = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/revisions/${revisionId}/clone`, {
@@ -890,8 +911,7 @@ function displayServicesOverview(data) {
                 `<span class="env-badge">${b.environmentName || 'env'} &rarr; ${b.upstreamName || 'upstream'}</span>`
             ).join(' ');
 
-            const stateClass = revision.state === 'DRAFT' ? 'state-draft' :
-                revision.state === 'DEPLOYED' ? 'state-deployed' : 'state-undeployed';
+            const stateClass = revision.state === 'ACTIVE' ? 'state-active' : 'state-inactive';
 
             return `
                 <div class="revision-item">
@@ -1037,23 +1057,15 @@ async function loadDeploymentData(providedOrgId, providedRevisionId) {
             // Find deployment and upstream binding for this environment
             const deployment = (revision.deployments || []).find(d => d.environmentId === env.id);
             const binding = (revision.upstreamBindings || []).find(b => b.environmentId === env.id);
-            const currentStatus = deployment ? 'DEPLOYED' : (revision.state === 'UNDEPLOYED' ? 'UNDEPLOYED' : 'DRAFT');
+            const isDeployed = !!deployment;
             const currentUpstreamId = binding ? binding.upstreamId : null;
 
             const upstreamsResponse = await fetch(`${API_BASE}/orgs/${orgId}/envs/${env.id}/upstreams?size=1000`);
             const upstreamsPageData = await upstreamsResponse.json();
             const upstreams = upstreamsPageData.content || [];
 
-            let statusClass = 'status-draft';
-            let statusIcon = '';
-            let statusText = 'Draft';
-            if (currentStatus === 'DEPLOYED') {
-                statusClass = 'status-deployed';
-                statusText = 'Deployed';
-            } else if (currentStatus === 'UNDEPLOYED') {
-                statusClass = 'status-undeployed';
-                statusText = 'Undeployed';
-            }
+            const statusClass = isDeployed ? 'status-active' : 'status-inactive';
+            const statusText = isDeployed ? 'Active' : 'Inactive';
 
             const configuredUpstream = currentUpstreamId
                 ? upstreams.find(u => u.id === currentUpstreamId)
@@ -1073,10 +1085,10 @@ async function loadDeploymentData(providedOrgId, providedRevisionId) {
                                     <div class="upstream-info">
                                         <strong>${configuredUpstream.name}</strong>
                                     </div>
-                                    ${currentStatus === 'DRAFT' ? `
+                                    ${!isDeployed ? `
                                         <button type="button" class="btn-change-upstream"
                                                 onclick="showUpstreamDropdown('${env.id}')">Change</button>
-                                    ` : `<small style="color: var(--text-secondary);"><em>(Locked - ${statusText})</em></small>`}
+                                    ` : `<small style="color: var(--text-secondary);"><em>(Locked - Deployed)</em></small>`}
                                 </div>
                                 <div id="upstream_dropdown_${env.id}" class="upstream-dropdown" style="display: none;">
                                     <select id="deploy_upstream_${env.id}">
@@ -1087,15 +1099,21 @@ async function loadDeploymentData(providedOrgId, providedRevisionId) {
                                             </option>
                                         `).join('')}
                                     </select>
+                                    <button type="button" class="btn-save-upstream"
+                                            onclick="saveUpstreamBinding('${orgId}', '${serviceId}', '${revisionId}', '${env.id}')">Save</button>
                                     <button type="button" class="btn-cancel-change"
                                             onclick="hideUpstreamDropdown('${env.id}')">Cancel</button>
                                 </div>
                             ` : `
                                 <select id="deploy_upstream_${env.id}"
-                                        ${currentStatus !== 'DRAFT' ? 'disabled' : ''}>
+                                        ${isDeployed ? 'disabled' : ''}>
                                     <option value="">Select Upstream</option>
                                     ${upstreams.map(u => `<option value="${u.id}">${u.name}</option>`).join('')}
                                 </select>
+                                ${!isDeployed ? `
+                                    <button type="button" class="btn-save-upstream" style="margin-top: 8px;"
+                                            onclick="saveUpstreamBinding('${orgId}', '${serviceId}', '${revisionId}', '${env.id}')">Save Upstream</button>
+                                ` : ''}
                             `}
                         </div>
                         ${deployment && deployment.deployedAt ? `
@@ -1103,7 +1121,7 @@ async function loadDeploymentData(providedOrgId, providedRevisionId) {
                         ` : ''}
                     </div>
                     <div class="env-card-actions">
-                        ${currentStatus === 'DEPLOYED' ? `
+                        ${isDeployed ? `
                             <button type="button" class="btn-undeploy" onclick="undeploySingleEnv('${orgId}', '${serviceId}', '${revisionId}', '${env.id}', '${env.name}')">
                                 Undeploy
                             </button>
@@ -1152,6 +1170,37 @@ function hideUpstreamDropdown(envId) {
     }
 }
 
+async function saveUpstreamBinding(orgId, serviceId, revisionId, envId) {
+    const upstreamSelect = document.getElementById(`deploy_upstream_${envId}`);
+    if (!upstreamSelect) return;
+
+    const upstreamId = upstreamSelect.value;
+    if (!upstreamId) {
+        showNotification('error', 'Upstream Required', 'Please select an upstream');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/revisions/${revisionId}/upstream-bindings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                environmentUpstreams: [{ environmentId: envId, upstreamId }]
+            })
+        });
+
+        if (response.ok) {
+            showNotification('success', 'Upstream Saved', 'Upstream binding saved successfully');
+            await loadDeploymentData(orgId, revisionId);
+        } else {
+            const errorText = await response.text();
+            showNotification('error', 'Save Failed', errorText);
+        }
+    } catch (error) {
+        showNotification('error', 'Error', error.message);
+    }
+}
+
 async function deploySingleEnv(orgId, serviceId, revisionId, envId, envName) {
     const upstreamSelect = document.getElementById(`deploy_upstream_${envId}`);
     if (!upstreamSelect) return;
@@ -1171,12 +1220,29 @@ async function deploySingleEnv(orgId, serviceId, revisionId, envId, envName) {
     if (!confirm(msg)) return;
 
     try {
+        // Set upstream binding first when not force-deploying (deploy uses existing bindings only).
+        // When force-deploying we may already be deployed to this env, so binding updates are not allowed.
+        if (!forceValue) {
+            const bindingsResponse = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/revisions/${revisionId}/upstream-bindings`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    environmentUpstreams: [{ environmentId: envId, upstreamId }]
+                })
+            });
+
+            if (!bindingsResponse.ok) {
+                const errorText = await bindingsResponse.text();
+                showNotification('error', 'Upstream Binding Failed', errorText);
+                return;
+            }
+        }
+
         const response = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/revisions/${revisionId}/deploy`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                environmentIds: [envId],
-                environmentUpstreams: [{ environmentId: envId, upstreamId }],
+                environmentId: envId,
                 force: forceValue
             })
         });
@@ -1200,7 +1266,7 @@ async function undeploySingleEnv(orgId, serviceId, revisionId, envId, envName) {
         const response = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/revisions/${revisionId}/undeploy`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ environmentIds: [envId] })
+            body: JSON.stringify({ environmentId: envId })
         });
 
         if (response.ok) {

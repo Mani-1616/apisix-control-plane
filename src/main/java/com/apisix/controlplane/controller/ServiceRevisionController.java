@@ -5,6 +5,8 @@ import com.apisix.controlplane.dto.DeploymentRequest;
 import com.apisix.controlplane.dto.PaginatedResponse;
 import com.apisix.controlplane.dto.PaginationRequest;
 import com.apisix.controlplane.dto.ServiceRevisionResponse;
+import com.apisix.controlplane.dto.UpdateRevisionSpecsRequest;
+import com.apisix.controlplane.dto.UpdateUpstreamBindingsRequest;
 import com.apisix.controlplane.service.ServiceRevisionService;
 import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -51,12 +53,21 @@ public class ServiceRevisionController {
     }
 
     @PutMapping("/{revisionId}")
-    public ResponseEntity<ServiceRevisionResponse> updateRevision(
+    public ResponseEntity<ServiceRevisionResponse> updateRevisionSpecs(
             @PathVariable String orgId,
             @PathVariable String serviceId,
             @PathVariable String revisionId,
-            @Valid @RequestBody CreateServiceRevisionRequest request) {
-        return ResponseEntity.ok(revisionService.updateRevision(revisionId, request));
+            @Valid @RequestBody UpdateRevisionSpecsRequest request) {
+        return ResponseEntity.ok(revisionService.updateRevisionSpecs(revisionId, request));
+    }
+
+    @PutMapping("/{revisionId}/upstream-bindings")
+    public ResponseEntity<ServiceRevisionResponse> updateUpstreamBindings(
+            @PathVariable String orgId,
+            @PathVariable String serviceId,
+            @PathVariable String revisionId,
+            @Valid @RequestBody UpdateUpstreamBindingsRequest request) {
+        return ResponseEntity.ok(revisionService.updateUpstreamBindings(revisionId, request));
     }
 
     @DeleteMapping("/{revisionId}")

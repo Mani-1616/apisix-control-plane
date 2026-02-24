@@ -284,7 +284,7 @@ curl -X POST http://localhost:8080/api/v1/organizations/{orgId}/apis \
 curl -X POST http://localhost:8080/api/v1/organizations/{orgId}/apis/revisions/{revisionId}/deploy \
   -H "Content-Type: application/json" \
   -d '{
-    "environmentIds": ["env-id-1", "env-id-2"]
+    "environmentId": "env-id-1"
   }'
 ```
 

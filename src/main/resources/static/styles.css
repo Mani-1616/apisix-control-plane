@@ -919,19 +919,14 @@ header h1 {
     letter-spacing: 0.5px;
 }
 
-.state-draft {
+.state-inactive {
     background: #e0e7ff;
     color: #4338ca;
 }
 
-.state-deployed {
+.state-active {
     background: #d1fae5;
     color: #065f46;
-}
-
-.state-undeployed {
-    background: #fee2e2;
-    color: #991b1b;
 }
 
 .env-badges {
@@ -949,19 +944,9 @@ header h1 {
     font-weight: 500;
 }
 
-.env-draft {
-    background: #f3f4f6;
-    color: #4b5563;
-}
-
 .env-deployed {
     background: #d1fae5;
     color: #065f46;
-}
-
-.env-undeployed {
-    background: #fef3c7;
-    color: #92400e;
 }
 
 .env-none {
@@ -1003,15 +988,11 @@ header h1 {
     transform: translateY(-2px);
 }
 
-.deployment-env-card.status-deployed {
+.deployment-env-card.status-active {
     border-color: #10b981;
 }
 
-.deployment-env-card.status-undeployed {
-    border-color: #f59e0b;
-}
-
-.deployment-env-card.status-draft {
+.deployment-env-card.status-inactive {
     border-color: #e5e7eb;
 }
 
@@ -1037,17 +1018,12 @@ header h1 {
     font-weight: 600;
 }
 
-.env-status-badge.status-deployed {
+.env-status-badge.status-active {
     background: #d1fae5;
     color: #065f46;
 }
 
-.env-status-badge.status-undeployed {
-    background: #fef3c7;
-    color: #92400e;
-}
-
-.env-status-badge.status-draft {
+.env-status-badge.status-inactive {
     background: #f3f4f6;
     color: #6b7280;
 }
@@ -1137,6 +1113,21 @@ header h1 {
     border: 1px solid var(--border-color);
     border-radius: 8px;
     font-size: 0.9rem;
+}
+
+.btn-save-upstream {
+    padding: 8px 16px;
+    background: var(--success-color);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-save-upstream:hover {
+    background: #059669;
 }
 
 .btn-cancel-change {

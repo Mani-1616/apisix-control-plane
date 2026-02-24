@@ -221,7 +221,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"environmentIds\": [\"{{envId}}\"],\n  \"environmentUpstreams\": {\n    \"{{envId}}\": \"{{upstreamId}}\"\n  },\n  \"force\": false\n}"
+              "raw": "{\n  \"environmentId\": \"{{envId}}\",\n  \"force\": false\n}"
             }
           }
         },
@@ -239,7 +239,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"environmentIds\": [\"{{envId}}\"],\n  \"force\": false\n}"
+              "raw": "{\n  \"environmentId\": \"{{envId}}\"\n}"
             }
           }
         }
