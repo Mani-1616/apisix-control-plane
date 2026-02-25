@@ -1,14 +1,7 @@
 package com.apisix.controlplane.controller;
 
-import com.apisix.controlplane.dto.CreateServiceRevisionRequest;
-import com.apisix.controlplane.dto.DeploymentRequest;
-import com.apisix.controlplane.dto.PaginatedResponse;
-import com.apisix.controlplane.dto.PaginationRequest;
-import com.apisix.controlplane.dto.ServiceRevisionResponse;
-import com.apisix.controlplane.dto.UpdateRevisionSpecsRequest;
-import com.apisix.controlplane.dto.UpdateUpstreamBindingsRequest;
+import com.apisix.controlplane.dto.*;
 import com.apisix.controlplane.service.ServiceRevisionService;
-import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -87,23 +80,23 @@ public class ServiceRevisionController {
         return ResponseEntity.status(HttpStatus.CREATED).body(revisionService.cloneRevision(revisionId));
     }
 
-    @Hidden
+
     @PostMapping("/{revisionId}/deploy")
     public ResponseEntity<ServiceRevisionResponse> deployRevision(
             @PathVariable String orgId,
             @PathVariable String serviceId,
             @PathVariable String revisionId,
-            @Valid @RequestBody DeploymentRequest request) {
+            @Valid @RequestBody DeployRequest request) {
         return ResponseEntity.ok(revisionService.deployRevision(revisionId, request));
     }
 
-    @Hidden
+
     @PostMapping("/{revisionId}/undeploy")
     public ResponseEntity<ServiceRevisionResponse> undeployRevision(
             @PathVariable String orgId,
             @PathVariable String serviceId,
             @PathVariable String revisionId,
-            @Valid @RequestBody DeploymentRequest request) {
+            @Valid @RequestBody UndeployRequest request) {
         return ResponseEntity.ok(revisionService.undeployRevision(revisionId, request));
     }
 }

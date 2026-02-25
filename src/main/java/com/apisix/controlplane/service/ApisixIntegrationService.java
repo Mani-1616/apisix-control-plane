@@ -106,8 +106,7 @@ public class ApisixIntegrationService {
      * Undeploy service and routes from an APISIX environment.
      */
     public void undeployServiceAndRoutes(Environment environment, ServiceRevision revision,
-                                         Service service,
-                                         com.apisix.controlplane.entity.Upstream upstream) {
+                                         Service service) {
         log.info("Undeploying service '{}' (Rev {}) from APISIX at {}",
                 service.getName(), revision.getRevisionNumber(), environment.getApisixAdminUrl());
 

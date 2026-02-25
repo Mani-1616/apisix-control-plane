@@ -4,10 +4,10 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 @Data
-public class DeploymentRequest {
+public class DeployRequest {
 
     /**
-     * Environment ID to deploy to or undeploy from
+     * Environment ID to deploy
      */
     @NotBlank(message = "Environment ID is required")
     private String environmentId;

@@ -1,16 +1,7 @@
 package com.apisix.controlplane.service;
 
 import com.apisix.controlplane.apisix.model.RouteSpec;
-import com.apisix.controlplane.dto.CreateServiceRevisionRequest;
-import com.apisix.controlplane.dto.DeploymentRequest;
-import com.apisix.controlplane.dto.DeploymentResponse;
-import com.apisix.controlplane.dto.PaginatedResponse;
-import com.apisix.controlplane.dto.EnvironmentUpstreamMapping;
-import com.apisix.controlplane.dto.UpdateRevisionSpecsRequest;
-import com.apisix.controlplane.dto.UpdateUpstreamBindingsRequest;
-import com.apisix.controlplane.dto.RevisionSummary;
-import com.apisix.controlplane.dto.ServiceRevisionResponse;
-import com.apisix.controlplane.dto.UpstreamBindingResponse;
+import com.apisix.controlplane.dto.*;
 import com.apisix.controlplane.entity.*;
 import com.apisix.controlplane.enums.RevisionState;
 import com.apisix.controlplane.exception.BusinessException;
@@ -237,7 +228,7 @@ public class ServiceRevisionService {
     }
 
     @Transactional
-    public ServiceRevisionResponse deployRevision(String revisionId, DeploymentRequest request) {
+    public ServiceRevisionResponse deployRevision(String revisionId, DeployRequest request) {
         ServiceRevision revision = findRevisionById(revisionId);
         Service service = apiServiceService.getServiceById(revision.getServiceId());
 
@@ -281,9 +272,8 @@ public class ServiceRevisionService {
                     .orElse(null);
 
             if (oldBinding != null) {
-                var oldUpstream = upstreamService.getUpstreamById(oldBinding.getUpstreamId());
                 try {
-                    apisixIntegrationService.undeployServiceAndRoutes(environment, oldRevision, service, oldUpstream);
+                    apisixIntegrationService.undeployServiceAndRoutes(environment, oldRevision, service);
                 } catch (Exception e) {
                     throw new BusinessException("Failed to auto-undeploy old revision: " + e.getMessage());
                 }
@@ -319,7 +309,7 @@ public class ServiceRevisionService {
     }
 
     @Transactional
-    public ServiceRevisionResponse undeployRevision(String revisionId, DeploymentRequest request) {
+    public ServiceRevisionResponse undeployRevision(String revisionId, UndeployRequest request) {
         ServiceRevision revision = findRevisionById(revisionId);
         Service service = apiServiceService.getServiceById(revision.getServiceId());
 
@@ -341,9 +331,8 @@ public class ServiceRevisionService {
                     .orElse(null);
 
             if (binding != null) {
-                var upstream = upstreamService.getUpstreamById(binding.getUpstreamId());
                 try {
-                    apisixIntegrationService.undeployServiceAndRoutes(environment, revision, service, upstream);
+                    apisixIntegrationService.undeployServiceAndRoutes(environment, revision, service);
                 } catch (Exception e) {
                     throw new BusinessException("Undeployment failed for environment " + envId + ": " + e.getMessage());
                 }
