@@ -14,8 +14,7 @@ import java.time.LocalDateTime;
     @UniqueConstraint(name = "uk_api_sub_org_dev_svc_env", columnNames = {"org_id", "developer_id", "service_id", "env_id"})
 }, indexes = {
     @Index(name = "idx_api_sub_org_env_dev", columnList = "org_id, env_id, developer_id"),
-    @Index(name = "idx_api_sub_org_dev", columnList = "org_id, developer_id"),
-    @Index(name = "idx_api_sub_apisix_consumer", columnList = "apisix_consumer_id")
+    @Index(name = "idx_api_sub_org_dev", columnList = "org_id, developer_id")
 })
 @Data
 @Builder
@@ -36,16 +35,8 @@ public class APISubscription {
     @Column(name = "developer_id", nullable = false)
     private String developerId;
 
-    @Column(name = "apisix_consumer_id")
-    private String apisixConsumerId;
-
-    /** FK to ApiService. Replaces the former apiName field. */
     @Column(name = "service_id", nullable = false)
     private String serviceId;
-
-    /** APISIX service ID used for the consumer-restriction whitelist. */
-    @Column(name = "apisix_service_id")
-    private String apisixServiceId;
 
     @Enumerated(EnumType.STRING)
     private SubscriptionStatus status;

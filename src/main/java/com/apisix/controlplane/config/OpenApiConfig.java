@@ -19,10 +19,11 @@ public class OpenApiConfig {
                         .version("1.0")
                         .description("API Gateway Control Plane for managing services, revisions, upstreams, and deployments"))
                 .tags(List.of(
-                        new Tag().name("Upstreams"),
-                        new Tag().name("Services"),
-                        new Tag().name("Service Revisions"),
-                        new Tag().name("Services Overview")
+                        new Tag().name("APIs"),
+                        new Tag().name("Products"),
+                        new Tag().name("Developers"),
+                        new Tag().name("API Subscriptions"),
+                        new Tag().name("Product Subscriptions")
                 ));
     }
 }

@@ -2,7 +2,7 @@ package com.apisix.controlplane.controller;
 
 import com.apisix.controlplane.dto.*;
 import com.apisix.controlplane.service.ServiceRevisionService;
-import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.Hidden;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/orgs/{orgId}/services/{serviceId}/revisions")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
-@Tag(name = "Service Revisions")
+@Hidden
 public class ServiceRevisionController {
 
     private final ServiceRevisionService revisionService;

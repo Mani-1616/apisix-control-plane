@@ -10,10 +10,11 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Entity
 @Table(name = "products", uniqueConstraints = {
-    @UniqueConstraint(name = "uk_product_org_name", columnNames = {"org_id", "name"})
+    @UniqueConstraint(name = "uk_product_org_env_name", columnNames = {"org_id", "env_id", "name"})
 })
 @Data
 @Builder
@@ -28,6 +29,9 @@ public class Product {
     @Column(name = "org_id", nullable = false)
     private String orgId;
 
+    @Column(name = "env_id", nullable = false)
+    private String envId;
+
     @Column(nullable = false)
     private String name;
 
@@ -41,8 +45,9 @@ public class Product {
     @Column(name = "service_ids", columnDefinition = "jsonb")
     private List<String> serviceIds;
 
-    @Column(name = "plugin_config", columnDefinition = "text")
-    private String pluginConfig;
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "plugins", columnDefinition = "jsonb")
+    private Map<String, Object> plugins;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;

@@ -1,6 +1,7 @@
 package com.apisix.controlplane.service;
 
 import com.apisix.controlplane.dto.CreateDeveloperRequest;
+import com.apisix.controlplane.dto.UpdateDeveloperRequest;
 import com.apisix.controlplane.entity.Developer;
 import com.apisix.controlplane.exception.BusinessException;
 import com.apisix.controlplane.exception.ResourceNotFoundException;
@@ -10,6 +11,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -40,7 +44,8 @@ public class DeveloperService {
         Developer developer = Developer.builder()
                 .orgId(orgId)
                 .email(request.getEmail())
-                .name(request.getName())
+                .firstName(request.getFirstName())
+                .lastName(request.getLastName())
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
@@ -60,6 +65,16 @@ public class DeveloperService {
         
         return developerRepository.findByOrgId(orgId);
     }
+
+    public Page<Developer> getDevelopersByOrganization(String orgId, Pageable pageable) {
+        log.info("Fetching developers for organization: {}", orgId);
+
+        if (!organizationRepository.existsById(orgId)) {
+            throw new ResourceNotFoundException("Organization not found: " + orgId);
+        }
+
+        return developerRepository.findByOrgId(orgId, pageable);
+    }
     
     public Developer getDeveloperById(String orgId, String developerId) {
         log.info("Fetching developer {} in organization {}", developerId, orgId);
@@ -75,21 +90,13 @@ public class DeveloperService {
     }
     
     @Transactional
-    public Developer updateDeveloper(String orgId, String developerId, CreateDeveloperRequest request) {
+    public Developer updateDeveloper(String orgId, String developerId, UpdateDeveloperRequest request) {
         log.info("Updating developer {} in organization {}", developerId, orgId);
         
         Developer developer = getDeveloperById(orgId, developerId);
         
-        // Check if email is being changed and if new email already exists
-        if (!developer.getEmail().equals(request.getEmail())) {
-            if (developerRepository.existsByOrgIdAndEmail(orgId, request.getEmail())) {
-                throw new BusinessException("Developer with email " + request.getEmail() + 
-                        " already exists in this organization");
-            }
-            developer.setEmail(request.getEmail());
-        }
-        
-        developer.setName(request.getName());
+        developer.setFirstName(request.getFirstName());
+        developer.setLastName(request.getLastName());
         developer.setUpdatedAt(LocalDateTime.now());
         
         Developer updated = developerRepository.save(developer);

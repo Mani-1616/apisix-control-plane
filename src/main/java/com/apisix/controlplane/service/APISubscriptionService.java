@@ -11,12 +11,12 @@ import com.apisix.controlplane.repository.EnvironmentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -37,15 +37,14 @@ public class APISubscriptionService {
     @Value("${apisix.admin.key}")
     private String adminKey;
 
-    private static final String CONSUMER_PREFIX = "svc";
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     @Transactional
-    public APISubscription createSubscription(String orgId, CreateSubscriptionRequest request) {
+    public APISubscription createSubscription(String orgId, String serviceId, CreateSubscriptionRequest request) {
         log.info("Creating subscription for developer {} to service {} in environment {} (org: {})",
-                request.getDeveloperId(), request.getServiceId(), request.getEnvId(), orgId);
+                request.getDeveloperId(), serviceId, request.getEnvId(), orgId);
 
-        Developer developer = developerService.getDeveloperById(orgId, request.getDeveloperId());
+        developerService.getDeveloperById(orgId, request.getDeveloperId());
 
         Environment environment = environmentRepository.findById(request.getEnvId())
                 .orElseThrow(() -> new ResourceNotFoundException("Environment not found: " + request.getEnvId()));
@@ -53,16 +52,14 @@ public class APISubscriptionService {
             throw new BusinessException("Environment does not belong to this organization");
         }
 
-        // Validate the service exists
-        Service service = apiServiceService.getServiceById(request.getServiceId());
+        Service service = apiServiceService.getServiceById(serviceId);
         if (!service.getOrgId().equals(orgId)) {
             throw new BusinessException("Service does not belong to this organization");
         }
 
-        // Check for existing subscription
         Optional<APISubscription> existing = subscriptionRepository
                 .findByOrgIdAndDeveloperIdAndServiceIdAndEnvId(
-                        orgId, request.getDeveloperId(), request.getServiceId(), request.getEnvId());
+                        orgId, request.getDeveloperId(), serviceId, request.getEnvId());
 
         if (existing.isPresent()) {
             APISubscription sub = existing.get();
@@ -77,17 +74,10 @@ public class APISubscriptionService {
             }
         }
 
-        // Verify service is deployed in this environment
-        deploymentRepository.findByServiceIdAndEnvironmentId(request.getServiceId(), request.getEnvId())
+        deploymentRepository.findByServiceIdAndEnvironmentId(serviceId, request.getEnvId())
                 .orElseThrow(() -> new BusinessException(
                         "No deployed revision found for service " + service.getName() + " in environment " + request.getEnvId()));
 
-        // APISIX service ID is the Postgres service UUID
-        String apisixServiceId = service.getId();
-
-        String apisixConsumerId = generateConsumerId(orgId, developer.getEmail(), request.getEnvId());
-
-        // Reuse existing API key if developer already has active subscriptions
         String apiKey;
         List<APISubscription> activeSubscriptions = subscriptionRepository
                 .findByOrgIdAndDeveloperIdAndEnvIdAndStatus(orgId, request.getDeveloperId(),
@@ -103,9 +93,7 @@ public class APISubscriptionService {
                 .orgId(orgId)
                 .envId(request.getEnvId())
                 .developerId(request.getDeveloperId())
-                .apisixConsumerId(apisixConsumerId)
-                .serviceId(request.getServiceId())
-                .apisixServiceId(apisixServiceId)
+                .serviceId(serviceId)
                 .status(SubscriptionStatus.PENDING)
                 .apiKey(apiKey)
                 .createdAt(LocalDateTime.now())
@@ -113,7 +101,7 @@ public class APISubscriptionService {
                 .build();
 
         try {
-            createOrUpdateConsumerInApisix(environment, apisixConsumerId, apiKey, orgId, request.getDeveloperId(), apisixServiceId);
+            createOrUpdateConsumerInApisix(environment, request.getDeveloperId(), apiKey, orgId, request.getDeveloperId(), serviceId);
             subscription.setStatus(SubscriptionStatus.ACTIVE);
         } catch (Exception e) {
             throw new BusinessException("Failed to create subscription in APISIX: " + e.getMessage());
@@ -124,29 +112,21 @@ public class APISubscriptionService {
         return saved;
     }
 
-    public List<APISubscription> getSubscriptionsByOrganization(String orgId, String developerId, String envId) {
+    public Page<APISubscription> getSubscriptionsByOrganization(String orgId, String developerId, String envId, Pageable pageable) {
         if (developerId != null && !developerId.isEmpty() && envId != null && !envId.isEmpty()) {
-            return subscriptionRepository.findByOrgIdAndDeveloperIdAndEnvId(orgId, developerId, envId);
+            return subscriptionRepository.findByOrgIdAndDeveloperIdAndEnvId(orgId, developerId, envId, pageable);
         }
         if (developerId != null && !developerId.isEmpty()) {
-            return subscriptionRepository.findByOrgIdAndDeveloperId(orgId, developerId);
+            return subscriptionRepository.findByOrgIdAndDeveloperId(orgId, developerId, pageable);
         }
         if (envId != null && !envId.isEmpty()) {
-            return subscriptionRepository.findByOrgIdAndEnvId(orgId, envId);
+            return subscriptionRepository.findByOrgIdAndEnvId(orgId, envId, pageable);
         }
-        return subscriptionRepository.findByOrgId(orgId);
+        return subscriptionRepository.findByOrgId(orgId, pageable);
     }
 
-    public List<APISubscription> getSubscriptionsByDeveloper(String orgId, String developerId, String envId) {
-        developerService.getDeveloperById(orgId, developerId);
-        if (envId != null && !envId.isEmpty()) {
-            return subscriptionRepository.findByOrgIdAndDeveloperIdAndEnvId(orgId, developerId, envId);
-        }
-        return subscriptionRepository.findByOrgIdAndDeveloperId(orgId, developerId);
-    }
-
-    public List<APISubscription> getAllSubscriptions(String orgId) {
-        return subscriptionRepository.findByOrgId(orgId);
+    public Page<APISubscription> getSubscriptionsByService(String orgId, String serviceId, Pageable pageable) {
+        return subscriptionRepository.findByOrgIdAndServiceId(orgId, serviceId, pageable);
     }
 
     @Transactional
@@ -178,8 +158,8 @@ public class APISubscriptionService {
         subscriptionRepository.save(subscription);
 
         try {
-            createOrUpdateConsumerInApisix(environment, subscription.getApisixConsumerId(),
-                    subscription.getApiKey(), orgId, subscription.getDeveloperId(), subscription.getApisixServiceId());
+            createOrUpdateConsumerInApisix(environment, subscription.getDeveloperId(),
+                    subscription.getApiKey(), orgId, subscription.getDeveloperId(), subscription.getServiceId());
             return subscription;
         } catch (Exception e) {
             subscription.setStatus(SubscriptionStatus.REVOKED);
@@ -209,8 +189,8 @@ public class APISubscriptionService {
         subscriptionRepository.save(subscription);
 
         try {
-            updateConsumerServiceWhitelist(environment, subscription.getApisixConsumerId(),
-                    orgId, subscription.getDeveloperId(), subscription.getApisixServiceId());
+            updateConsumerServiceWhitelist(environment, subscription.getDeveloperId(),
+                    orgId, subscription.getDeveloperId(), subscription.getServiceId());
         } catch (Exception e) {
             subscription.setStatus(SubscriptionStatus.ACTIVE);
             subscription.setUpdatedAt(LocalDateTime.now());
@@ -230,7 +210,7 @@ public class APISubscriptionService {
                 .findByOrgIdAndDeveloperIdAndEnvIdAndStatus(orgId, developerId, environment.getId(), SubscriptionStatus.ACTIVE);
 
         List<String> serviceWhitelist = activeSubscriptions.stream()
-                .map(APISubscription::getApisixServiceId)
+                .map(APISubscription::getServiceId)
                 .distinct()
                 .collect(Collectors.toList());
 
@@ -268,11 +248,11 @@ public class APISubscriptionService {
     }
 
     private void updateConsumerServiceWhitelist(Environment environment, String consumerId,
-                                               String orgId, String developerId, String apisixServiceIdToRemove) {
+                                               String orgId, String developerId, String serviceIdToRemove) {
         List<APISubscription> activeSubscriptions = subscriptionRepository
                 .findByOrgIdAndDeveloperIdAndEnvIdAndStatus(orgId, developerId, environment.getId(), SubscriptionStatus.ACTIVE)
                 .stream()
-                .filter(sub -> !sub.getApisixServiceId().equals(apisixServiceIdToRemove))
+                .filter(sub -> !sub.getServiceId().equals(serviceIdToRemove))
                 .collect(Collectors.toList());
 
         if (activeSubscriptions.isEmpty()) {
@@ -301,28 +281,10 @@ public class APISubscriptionService {
         }
     }
 
-    private String generateConsumerId(String orgId, String email, String envId) {
-        String emailHash = hashString(email).substring(0, 8);
-        return String.format("%s-%s-%s-%s", CONSUMER_PREFIX, orgId, envId, emailHash);
-    }
-
     private String generateApiKey() {
         byte[] randomBytes = new byte[32];
         SECURE_RANDOM.nextBytes(randomBytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
     }
 
-    private String hashString(String input) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
-            StringBuilder result = new StringBuilder();
-            for (byte b : hash) {
-                result.append(String.format("%02x", b));
-            }
-            return result.toString();
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to hash string", e);
-        }
-    }
 }

@@ -14,9 +14,7 @@ import java.time.LocalDateTime;
     @UniqueConstraint(name = "uk_prod_sub_org_dev_prod_env", columnNames = {"org_id", "developer_id", "product_id", "env_id"})
 }, indexes = {
     @Index(name = "idx_prod_sub_org_env", columnList = "org_id, env_id"),
-    @Index(name = "idx_prod_sub_org_dev_env", columnList = "org_id, developer_id, env_id"),
-    @Index(name = "idx_prod_sub_consumer_id", columnList = "consumer_id"),
-    @Index(name = "idx_prod_sub_consumer_group", columnList = "consumer_group_id")
+    @Index(name = "idx_prod_sub_org_dev_env", columnList = "org_id, developer_id, env_id")
 })
 @Data
 @Builder
@@ -39,20 +37,6 @@ public class ProductSubscription {
 
     @Column(name = "product_id", nullable = false)
     private String productId;
-
-    /**
-     * APISIX consumer ID for this product subscription
-     * Format: prod-{productName}-{envHash}-{developerHash}
-     */
-    @Column(name = "consumer_id")
-    private String consumerId;
-
-    /**
-     * APISIX consumer group ID
-     * Format: grp-{productName}-{envHash}
-     */
-    @Column(name = "consumer_group_id")
-    private String consumerGroupId;
 
     /**
      * Unique API key for this product subscription

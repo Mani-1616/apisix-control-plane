@@ -3,7 +3,10 @@ let globalOrgId = null;
 let selectedEnvId = null;
 let environments = [];
 let upstreams = [];
-let servicesCache = []; // cache loaded services for lookups
+let servicesCache = [];
+let developersCache = [];
+let environmentsCache = [];
+let productsCache = [];
 let overviewPage = 1;
 let overviewSize = 10;
 
@@ -83,21 +86,27 @@ function showTab(tabName, targetButton) {
     }
     if (tabName === 'developers') loadDevelopers();
     if (tabName === 'subscriptions') {
-        loadDevelopersForSubscription();
-        loadEnvironmentsForSubscription();
-        loadDevelopersForFilter();
-        loadEnvironmentsForFilter();
-        loadSubscriptions();
+        Promise.all([
+            loadDevelopersForSubscription(),
+            loadEnvironmentsForSubscription(),
+            loadDevelopersForFilter(),
+            loadEnvironmentsForFilter(),
+            ensureServicesCacheLoaded()
+        ]).then(() => loadSubscriptions());
     }
     if (tabName === 'products') {
+        loadEnvironmentsForProducts();
         loadServicesForProductSelection();
         loadProducts();
     }
     if (tabName === 'product-subscriptions') {
-        loadDevelopersForProductSubscription();
-        loadEnvironmentsForProductSubscription();
-        loadProductsForSubscription();
-        loadProductSubscriptions();
+        Promise.all([
+            loadDevelopersForProductSubscription(),
+            loadEnvironmentsForProductSubscription(),
+            loadProductsForSubscription(),
+            ensureServicesCacheLoaded(),
+            ensureProductsCacheLoaded()
+        ]).then(() => loadProductSubscriptions());
     }
     if (tabName === 'deployment') loadServicesForDeployment();
 }
@@ -1315,17 +1324,18 @@ document.getElementById('createDeveloperForm').addEventListener('submit', async 
     if (!orgId) return;
 
     const email = document.getElementById('developerEmail').value;
-    const name = document.getElementById('developerName').value;
+    const firstName = document.getElementById('developerFirstName').value;
+    const lastName = document.getElementById('developerLastName').value;
 
     try {
         const response = await fetch(`${API_BASE}/orgs/${orgId}/developers`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, name })
+            body: JSON.stringify({ email, firstName, lastName })
         });
 
         if (response.ok) {
-            showNotification('success', 'Developer Added', `Developer "${name}" added`);
+            showNotification('success', 'Developer Added', `Developer "${firstName} ${lastName}" added`);
             e.target.reset();
             loadDevelopers();
         } else {
@@ -1346,9 +1356,9 @@ async function loadDevelopers() {
     }
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/developers`);
-        const developers = await response.json();
-        displayDevelopers(developers, orgId);
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/developers?size=1000`);
+        const data = await response.json();
+        displayDevelopers(data.content || [], orgId);
     } catch (error) {
         console.error('Error loading developers:', error);
     }
@@ -1363,11 +1373,11 @@ function displayDevelopers(developers, orgId) {
 
     list.innerHTML = developers.map(dev => `
         <div class="card">
-            <h3>${dev.name}</h3>
+            <h3>${dev.firstName} ${dev.lastName}</h3>
             <p><strong>Email:</strong> ${dev.email}</p>
             <small>ID: ${dev.id}</small>
             <div class="card-actions">
-                <button onclick="deleteDeveloper('${orgId}', '${dev.id}', '${dev.name}')" class="btn-danger">Remove</button>
+                <button onclick="deleteDeveloper('${orgId}', '${dev.id}', '${dev.firstName} ${dev.lastName}')" class="btn-danger">Remove</button>
             </div>
         </div>
     `).join('');
@@ -1400,10 +1410,10 @@ document.getElementById('createSubscriptionForm').addEventListener('submit', asy
     const serviceId = document.getElementById('subServiceId').value;
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/subscriptions`, {
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/subscriptions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ developerId, envId, serviceId })
+            body: JSON.stringify({ developerId, envId })
         });
 
         if (response.ok) {
@@ -1427,10 +1437,12 @@ async function loadDevelopersForSubscription() {
     if (!orgId) { select.innerHTML = '<option value="">Select org first</option>'; return; }
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/developers`);
-        const developers = await response.json();
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/developers?size=1000`);
+        const data = await response.json();
+        const developers = data.content || [];
+        developersCache = developers;
         select.innerHTML = '<option value="">Select Developer</option>' +
-            developers.map(dev => `<option value="${dev.id}">${dev.name} (${dev.email})</option>`).join('');
+            developers.map(dev => `<option value="${dev.id}">${dev.firstName} ${dev.lastName} (${dev.email})</option>`).join('');
     } catch (error) {
         console.error('Error:', error);
     }
@@ -1445,6 +1457,7 @@ async function loadEnvironmentsForSubscription() {
     try {
         const response = await fetch(`${API_BASE}/orgs/${orgId}/envs`);
         const envs = await response.json();
+        environmentsCache = envs;
         select.innerHTML = '<option value="">Select Environment</option>' +
             envs.map(env => `<option value="${env.id}">${env.name}</option>`).join('');
     } catch (error) {
@@ -1492,10 +1505,12 @@ async function loadDevelopersForFilter() {
     if (!orgId) { select.innerHTML = '<option value="">All Developers</option>'; return; }
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/developers`);
-        const developers = await response.json();
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/developers?size=1000`);
+        const data = await response.json();
+        const developers = data.content || [];
+        developersCache = developers;
         select.innerHTML = '<option value="">All Developers</option>' +
-            developers.map(dev => `<option value="${dev.id}">${dev.name}</option>`).join('');
+            developers.map(dev => `<option value="${dev.id}">${dev.firstName} ${dev.lastName}</option>`).join('');
     } catch (error) {
         console.error('Error:', error);
     }
@@ -1510,6 +1525,7 @@ async function loadEnvironmentsForFilter() {
     try {
         const response = await fetch(`${API_BASE}/orgs/${orgId}/envs`);
         const envs = await response.json();
+        environmentsCache = envs;
         select.innerHTML = '<option value="">All Environments</option>' +
             envs.map(env => `<option value="${env.id}">${env.name}</option>`).join('');
     } catch (error) {
@@ -1533,19 +1549,79 @@ async function loadSubscriptions() {
         const params = new URLSearchParams();
         if (developerId) params.append('developerId', developerId);
         if (envId) params.append('envId', envId);
-        if (params.toString()) url += `?${params.toString()}`;
+        params.append('size', '1000');
+        url += `?${params.toString()}`;
 
         const response = await fetch(url);
-        const subscriptions = await response.json();
-        displaySubscriptions(subscriptions, orgId);
+        const data = await response.json();
+        displaySubscriptions(data.content || [], orgId);
     } catch (error) {
         console.error('Error:', error);
+    }
+}
+
+async function ensureServicesCacheLoaded() {
+    if (servicesCache.length > 0) return;
+    const orgId = getCurrentOrgId();
+    if (!orgId) return;
+    try {
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/services?size=1000`);
+        const data = await response.json();
+        servicesCache = data.content || [];
+    } catch (error) {
+        console.error('Error loading services cache:', error);
     }
 }
 
 function getServiceName(serviceId) {
     const svc = servicesCache.find(s => s.id === serviceId);
     return svc ? svc.name : serviceId;
+}
+
+function getDeveloperName(developerId) {
+    const dev = developersCache.find(d => d.id === developerId);
+    return dev ? `${dev.firstName} ${dev.lastName}` : developerId;
+}
+
+function getEnvironmentName(envId) {
+    const env = environmentsCache.find(e => e.id === envId);
+    return env ? env.name : envId;
+}
+
+async function ensureEnvironmentsCacheLoaded() {
+    if (environmentsCache.length > 0) return;
+    const orgId = getCurrentOrgId();
+    if (!orgId) return;
+    try {
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/envs`);
+        environmentsCache = await response.json();
+    } catch (error) {
+        console.error('Error loading environments cache:', error);
+    }
+}
+
+function getProductName(productId) {
+    const prod = productsCache.find(p => p.id === productId);
+    return prod ? (prod.displayName || prod.name) : productId;
+}
+
+async function ensureProductsCacheLoaded() {
+    if (productsCache.length > 0) return;
+    const orgId = getCurrentOrgId();
+    if (!orgId) return;
+    try {
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/envs`);
+        const envs = await response.json();
+        let allProducts = [];
+        for (const env of envs) {
+            const prodResponse = await fetch(`${API_BASE}/orgs/${orgId}/envs/${env.id}/products`);
+            const products = await prodResponse.json();
+            allProducts = allProducts.concat(products);
+        }
+        productsCache = allProducts;
+    } catch (error) {
+        console.error('Error loading products cache:', error);
+    }
 }
 
 function displaySubscriptions(subscriptions, orgId) {
@@ -1562,18 +1638,16 @@ function displaySubscriptions(subscriptions, orgId) {
         return `
             <div class="card">
                 <h3>${getServiceName(sub.serviceId)}</h3>
-                <p><strong>Service ID:</strong> ${sub.serviceId}</p>
-                <p><strong>Developer ID:</strong> ${sub.developerId}</p>
-                <p><strong>Environment ID:</strong> ${sub.envId}</p>
-                <p><strong>Consumer ID:</strong> ${sub.apisixConsumerId}</p>
+                <p><strong>Developer:</strong> ${getDeveloperName(sub.developerId)}</p>
+                <p><strong>Environment:</strong> ${getEnvironmentName(sub.envId)}</p>
                 <p><strong>Status:</strong> <span class="badge ${statusClass}">${sub.status}</span></p>
                 <p><strong>Created:</strong> ${new Date(sub.createdAt).toLocaleString()}</p>
                 <div class="card-actions">
                     ${sub.status === 'ACTIVE' ? `
-                        <button onclick="revokeSubscription('${orgId}', '${sub.id}')" class="btn-danger">Revoke Access</button>
+                        <button onclick="revokeSubscription('${orgId}', '${sub.serviceId}', '${sub.id}')" class="btn-danger">Revoke Access</button>
                     ` : ''}
                     ${sub.status === 'REVOKED' ? `
-                        <button onclick="grantSubscription('${orgId}', '${sub.id}')" class="btn-primary">Grant Access</button>
+                        <button onclick="grantSubscription('${orgId}', '${sub.serviceId}', '${sub.id}')" class="btn-primary">Grant Access</button>
                     ` : ''}
                 </div>
             </div>
@@ -1581,11 +1655,11 @@ function displaySubscriptions(subscriptions, orgId) {
     }).join('');
 }
 
-async function revokeSubscription(orgId, subscriptionId) {
+async function revokeSubscription(orgId, serviceId, subscriptionId) {
     if (!confirm('Revoke this subscription?')) return;
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/subscriptions/${subscriptionId}`, { method: 'DELETE' });
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/subscriptions/${subscriptionId}`, { method: 'DELETE' });
         if (response.ok) {
             showNotification('success', 'Revoked', 'Subscription revoked');
             loadSubscriptions();
@@ -1597,11 +1671,11 @@ async function revokeSubscription(orgId, subscriptionId) {
     }
 }
 
-async function grantSubscription(orgId, subscriptionId) {
+async function grantSubscription(orgId, serviceId, subscriptionId) {
     if (!confirm('Grant access again?')) return;
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/subscriptions/${subscriptionId}/grant`, { method: 'PUT' });
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/subscriptions/${subscriptionId}/grant`, { method: 'PUT' });
         if (response.ok) {
             showNotification('success', 'Granted', 'Access granted');
             loadSubscriptions();
@@ -1614,32 +1688,64 @@ async function grantSubscription(orgId, subscriptionId) {
 }
 
 // ===== API PRODUCTS =====
-async function loadProducts() {
+function getProductEnvId() {
+    return document.getElementById('productEnvSelector')?.value || '';
+}
+
+async function loadEnvironmentsForProducts() {
     const orgId = getCurrentOrgId();
-    if (!orgId) {
-        document.getElementById('productsList').innerHTML =
-            '<p class="info-text">Please select an organization</p>';
-        return;
-    }
+    const select = document.getElementById('productEnvSelector');
+    if (!select) return;
+    if (!orgId) { select.innerHTML = '<option value="">Select Environment</option>'; return; }
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/products`);
-        const products = await response.json();
-        displayProducts(products, orgId);
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/envs`);
+        const envs = await response.json();
+        const currentValue = select.value;
+        select.innerHTML = '<option value="">Select Environment</option>' +
+            envs.map(env => `<option value="${env.id}">${env.name}</option>`).join('');
+        if (currentValue) select.value = currentValue;
     } catch (error) {
         console.error('Error:', error);
     }
 }
 
-function displayProducts(products, orgId) {
+function onProductEnvChange() {
+    loadProducts();
+}
+
+async function loadProducts() {
+    const orgId = getCurrentOrgId();
+    const envId = getProductEnvId();
+    if (!orgId) {
+        document.getElementById('productsList').innerHTML =
+            '<p class="info-text">Please select an organization</p>';
+        return;
+    }
+    if (!envId) {
+        document.getElementById('productsList').innerHTML =
+            '<p class="info-text">Please select an environment</p>';
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/envs/${envId}/products`);
+        const products = await response.json();
+        displayProducts(products, orgId, envId);
+    } catch (error) {
+        console.error('Error:', error);
+    }
+}
+
+function displayProducts(products, orgId, envId) {
     const list = document.getElementById('productsList');
     if (products.length === 0) {
-        list.innerHTML = '<p class="info-text">No products found.</p>';
+        list.innerHTML = '<p class="info-text">No products found in this environment.</p>';
         return;
     }
 
     list.innerHTML = products.map(product => {
-        const serviceNames = (product.serviceIds || []).map(id => getServiceName(id)).join(', ');
+        const serviceNames = (product.services || []).map(s => s.displayName || s.name).join(', ');
         return `
             <div class="card">
                 <h3>${product.displayName || product.name}</h3>
@@ -1648,8 +1754,9 @@ function displayProducts(products, orgId) {
                 ${product.description ? `<p><strong>Description:</strong> ${product.description}</p>` : ''}
                 <p><strong>Created:</strong> ${new Date(product.createdAt).toLocaleString()}</p>
                 <div class="card-actions">
-                    <button onclick="deleteProduct('${orgId}', '${product.id}', '${product.name}', false)" class="btn-danger">Delete</button>
-                    <button onclick="deleteProduct('${orgId}', '${product.id}', '${product.name}', true)" class="btn-danger" style="opacity: 0.8;">Force Delete</button>
+                    <button onclick="cloneProduct('${orgId}', '${envId}', '${product.id}', '${product.name}')" class="btn-primary">Clone</button>
+                    <button onclick="deleteProduct('${orgId}', '${envId}', '${product.id}', '${product.name}', false)" class="btn-danger">Delete</button>
+                    <button onclick="deleteProduct('${orgId}', '${envId}', '${product.id}', '${product.name}', true)" class="btn-danger" style="opacity: 0.8;">Force Delete</button>
                 </div>
             </div>
         `;
@@ -1689,7 +1796,12 @@ document.getElementById('createProductForm').addEventListener('submit', async (e
     e.preventDefault();
 
     const orgId = getCurrentOrgId();
+    const envId = getProductEnvId();
     if (!orgId) return;
+    if (!envId) {
+        showNotification('error', 'Validation Error', 'Please select an environment first');
+        return;
+    }
 
     const selectedServiceIds = Array.from(document.querySelectorAll('.product-service-checkbox:checked'))
         .map(cb => cb.value);
@@ -1699,12 +1811,13 @@ document.getElementById('createProductForm').addEventListener('submit', async (e
         return;
     }
 
-    const pluginConfig = document.getElementById('productPluginConfig').value.trim();
-    if (pluginConfig) {
+    const pluginsText = document.getElementById('productPluginConfig').value.trim();
+    let plugins = null;
+    if (pluginsText) {
         try {
-            JSON.parse(pluginConfig);
+            plugins = JSON.parse(pluginsText);
         } catch (error) {
-            showNotification('error', 'Invalid JSON', 'Plugin configuration must be valid JSON');
+            showNotification('error', 'Invalid JSON', 'Plugins configuration must be valid JSON');
             return;
         }
     }
@@ -1714,11 +1827,11 @@ document.getElementById('createProductForm').addEventListener('submit', async (e
         displayName: document.getElementById('productDisplayName').value,
         description: document.getElementById('productDescription').value,
         serviceIds: selectedServiceIds,
-        pluginConfig: pluginConfig || null
+        plugins: plugins
     };
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/products`, {
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/envs/${envId}/products`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(productData)
@@ -1737,14 +1850,14 @@ document.getElementById('createProductForm').addEventListener('submit', async (e
     }
 });
 
-async function deleteProduct(orgId, productId, productName, force) {
+async function deleteProduct(orgId, envId, productId, productName, force) {
     const message = force
         ? `FORCE DELETE product "${productName}"? This deletes ALL subscriptions and consumer groups.`
         : `Delete product "${productName}"?`;
     if (!confirm(message)) return;
 
     try {
-        const url = `${API_BASE}/orgs/${orgId}/products/${productId}${force ? '?force=true' : ''}`;
+        const url = `${API_BASE}/orgs/${orgId}/envs/${envId}/products/${productId}${force ? '?force=true' : ''}`;
         const response = await fetch(url, { method: 'DELETE' });
 
         if (response.ok) {
@@ -1753,6 +1866,28 @@ async function deleteProduct(orgId, productId, productName, force) {
         } else {
             const errorData = await response.json();
             showNotification('error', 'Failed', errorData.message || 'Failed to delete product');
+        }
+    } catch (error) {
+        showNotification('error', 'Error', error.message);
+    }
+}
+
+async function cloneProduct(orgId, envId, productId, productName) {
+    const targetEnvId = prompt(`Clone product "${productName}" to which environment?\nEnter the target environment ID:`);
+    if (!targetEnvId) return;
+
+    try {
+        const response = await fetch(
+            `${API_BASE}/orgs/${orgId}/envs/${envId}/products/${productId}/clone?targetEnvId=${encodeURIComponent(targetEnvId)}`,
+            { method: 'POST' }
+        );
+
+        if (response.ok) {
+            showNotification('success', 'Cloned', `Product "${productName}" cloned to target environment!`);
+            loadProducts();
+        } else {
+            const errorData = await response.json();
+            showNotification('error', 'Failed', errorData.message || 'Failed to clone product');
         }
     } catch (error) {
         showNotification('error', 'Error', error.message);
@@ -1771,11 +1906,16 @@ async function loadProductSubscriptions() {
     const developerId = document.getElementById('prodSubFilterDeveloperId')?.value || '';
     const envId = document.getElementById('prodSubFilterEnvId')?.value || '';
 
+    if (!envId) {
+        document.getElementById('productSubscriptionsList').innerHTML =
+            '<p class="info-text">Please select an environment</p>';
+        return;
+    }
+
     try {
-        let url = `${API_BASE}/orgs/${orgId}/product-subscriptions`;
+        let url = `${API_BASE}/orgs/${orgId}/envs/${envId}/products/_/subscriptions`;
         const params = new URLSearchParams();
         if (developerId) params.append('developerId', developerId);
-        if (envId) params.append('envId', envId);
         if (params.toString()) url += `?${params.toString()}`;
 
         const response = await fetch(url);
@@ -1799,20 +1939,18 @@ function displayProductSubscriptions(subscriptions, orgId) {
         return `
             <div class="card">
                 <h3>Product Subscription</h3>
-                <p><strong>Product ID:</strong> ${sub.productId}</p>
-                <p><strong>Developer ID:</strong> ${sub.developerId}</p>
-                <p><strong>Environment ID:</strong> ${sub.envId}</p>
-                <p><strong>Consumer ID:</strong> ${sub.consumerId}</p>
-                <p><strong>Consumer Group:</strong> ${sub.consumerGroupId}</p>
+                <p><strong>Product:</strong> ${getProductName(sub.productId)}</p>
+                <p><strong>Developer:</strong> ${getDeveloperName(sub.developerId)}</p>
+                <p><strong>Environment:</strong> ${getEnvironmentName(sub.envId)}</p>
                 <p><strong>API Key:</strong> <code>${sub.apiKey}</code></p>
                 <p><strong>Status:</strong> <span class="badge badge-${statusClass}">${sub.status}</span></p>
                 <p><strong>Created:</strong> ${new Date(sub.createdAt).toLocaleString()}</p>
                 <div class="card-actions">
                     ${sub.status === 'ACTIVE' ? `
-                        <button onclick="revokeProductSubscription('${orgId}', '${sub.id}')" class="btn-danger">Revoke</button>
+                        <button onclick="revokeProductSubscription('${orgId}', '${sub.envId}', '${sub.productId}', '${sub.id}')" class="btn-danger">Revoke</button>
                     ` : ''}
                     ${sub.status === 'REVOKED' ? `
-                        <button onclick="grantProductSubscription('${orgId}', '${sub.id}')" class="btn-primary">Grant</button>
+                        <button onclick="grantProductSubscription('${orgId}', '${sub.envId}', '${sub.productId}', '${sub.id}')" class="btn-primary">Grant</button>
                     ` : ''}
                 </div>
             </div>
@@ -1825,14 +1963,16 @@ async function loadDevelopersForProductSubscription() {
     if (!orgId) return;
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/developers`);
-        const developers = await response.json();
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/developers?size=1000`);
+        const data = await response.json();
+        const developers = data.content || [];
+        developersCache = developers;
         ['prodSubDeveloperId', 'prodSubFilterDeveloperId'].forEach(id => {
             const select = document.getElementById(id);
             if (select) {
                 const currentValue = select.value;
                 select.innerHTML = '<option value="">Select Developer</option>' +
-                    developers.map(dev => `<option value="${dev.id}">${dev.name} (${dev.email})</option>`).join('');
+                    developers.map(dev => `<option value="${dev.id}">${dev.firstName} ${dev.lastName} (${dev.email})</option>`).join('');
                 if (currentValue) select.value = currentValue;
             }
         });
@@ -1843,20 +1983,16 @@ async function loadDevelopersForProductSubscription() {
 
 async function loadEnvironmentsForProductSubscription() {
     const orgId = getCurrentOrgId();
-    if (!orgId) return;
+    const select = document.getElementById('prodSubFilterEnvId');
+    if (!select) return;
+    if (!orgId) { select.innerHTML = '<option value="">All Environments</option>'; return; }
 
     try {
         const response = await fetch(`${API_BASE}/orgs/${orgId}/envs`);
-        const environments = await response.json();
-        ['prodSubEnvId', 'prodSubFilterEnvId'].forEach(id => {
-            const select = document.getElementById(id);
-            if (select) {
-                const currentValue = select.value;
-                select.innerHTML = '<option value="">Select Environment</option>' +
-                    environments.map(env => `<option value="${env.id}">${env.name}</option>`).join('');
-                if (currentValue) select.value = currentValue;
-            }
-        });
+        const envs = await response.json();
+        environmentsCache = envs;
+        select.innerHTML = '<option value="">All Environments</option>' +
+            envs.map(env => `<option value="${env.id}">${env.name}</option>`).join('');
     } catch (error) {
         console.error('Error:', error);
     }
@@ -1867,12 +2003,20 @@ async function loadProductsForSubscription() {
     if (!orgId) return;
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/products`);
-        const products = await response.json();
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/envs`);
+        const envs = await response.json();
+
+        let allProducts = [];
+        for (const env of envs) {
+            const prodResponse = await fetch(`${API_BASE}/orgs/${orgId}/envs/${env.id}/products`);
+            const products = await prodResponse.json();
+            allProducts = allProducts.concat(products.map(p => ({ ...p, envName: env.name })));
+        }
+
         const select = document.getElementById('prodSubProductId');
         if (select) {
             select.innerHTML = '<option value="">Select Product</option>' +
-                products.map(prod => `<option value="${prod.id}">${prod.displayName || prod.name}</option>`).join('');
+                allProducts.map(prod => `<option value="${prod.id}" data-env-id="${prod.envId}">${prod.displayName || prod.name} (${prod.envName})</option>`).join('');
         }
     } catch (error) {
         console.error('Error:', error);
@@ -1884,14 +2028,15 @@ document.getElementById('createProductSubscriptionForm').addEventListener('submi
     const orgId = getCurrentOrgId();
     if (!orgId) return;
 
+    const productSelect = document.getElementById('prodSubProductId');
+    const productId = productSelect.value;
+    const envId = productSelect.selectedOptions[0].dataset.envId;
     const subscriptionData = {
-        developerId: document.getElementById('prodSubDeveloperId').value,
-        envId: document.getElementById('prodSubEnvId').value,
-        productId: document.getElementById('prodSubProductId').value
+        developerId: document.getElementById('prodSubDeveloperId').value
     };
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/product-subscriptions`, {
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/envs/${envId}/products/${productId}/subscriptions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(subscriptionData)
@@ -1909,10 +2054,10 @@ document.getElementById('createProductSubscriptionForm').addEventListener('submi
     }
 });
 
-async function revokeProductSubscription(orgId, subscriptionId) {
+async function revokeProductSubscription(orgId, envId, productId, subscriptionId) {
     if (!confirm('Revoke this product subscription?')) return;
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/product-subscriptions/${subscriptionId}`, { method: 'DELETE' });
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/envs/${envId}/products/${productId}/subscriptions/${subscriptionId}`, { method: 'DELETE' });
         if (response.ok) {
             showNotification('success', 'Revoked', 'Product subscription revoked');
             loadProductSubscriptions();
@@ -1924,10 +2069,10 @@ async function revokeProductSubscription(orgId, subscriptionId) {
     }
 }
 
-async function grantProductSubscription(orgId, subscriptionId) {
+async function grantProductSubscription(orgId, envId, productId, subscriptionId) {
     if (!confirm('Grant access?')) return;
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/product-subscriptions/${subscriptionId}/grant`, { method: 'PUT' });
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/envs/${envId}/products/${productId}/subscriptions/${subscriptionId}/grant`, { method: 'PUT' });
         if (response.ok) {
             showNotification('success', 'Granted', 'Product subscription granted');
             loadProductSubscriptions();

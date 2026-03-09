@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/orgs/{orgId}/services")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
-@Tag(name = "Services")
+@Tag(name = "APIs")
 public class ServiceController {
 
     private final ApiServiceService apiServiceService;

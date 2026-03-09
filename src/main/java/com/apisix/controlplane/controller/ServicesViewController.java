@@ -7,6 +7,7 @@ import com.apisix.controlplane.dto.ServiceWithRevisionsResponse;
 import com.apisix.controlplane.entity.Service;
 import com.apisix.controlplane.service.ApiServiceService;
 import com.apisix.controlplane.service.ServiceRevisionService;
+import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 @Tag(name = "Services Overview")
+@Hidden
 public class ServicesViewController {
 
     private final ApiServiceService apiServiceService;

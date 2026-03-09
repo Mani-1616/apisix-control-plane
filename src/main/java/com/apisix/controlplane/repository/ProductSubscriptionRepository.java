@@ -25,8 +25,6 @@ public interface ProductSubscriptionRepository extends JpaRepository<ProductSubs
     List<ProductSubscription> findByOrgIdAndDeveloperIdAndEnvIdAndStatus(
             String orgId, String developerId, String envId, SubscriptionStatus status);
 
-    List<ProductSubscription> findByConsumerGroupId(String consumerGroupId);
-
     List<ProductSubscription> findByProductId(String productId);
 
     List<ProductSubscription> findByOrgIdAndProductId(String orgId, String productId);

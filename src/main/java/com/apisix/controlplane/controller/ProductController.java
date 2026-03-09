@@ -1,9 +1,10 @@
 package com.apisix.controlplane.controller;
 
 import com.apisix.controlplane.dto.CreateProductRequest;
+import com.apisix.controlplane.dto.ProductResponse;
 import com.apisix.controlplane.entity.Product;
 import com.apisix.controlplane.service.ProductService;
-import io.swagger.v3.oas.annotations.Hidden;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,58 +15,74 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/orgs/{orgId}/products")
+@RequestMapping("/api/orgs/{orgId}/envs/{envId}/products")
 @RequiredArgsConstructor
 @Slf4j
-@Hidden
+@Tag(name = "Products")
 @CrossOrigin(origins = "*")
 public class ProductController {
-    
+
     private final ProductService productService;
-    
+
     @PostMapping
-    public ResponseEntity<Product> createProduct(
+    public ResponseEntity<ProductResponse> createProduct(
             @PathVariable String orgId,
+            @PathVariable String envId,
             @Valid @RequestBody CreateProductRequest request) {
-        log.info("POST /api/v1/organizations/{}/products - Creating product", orgId);
-        Product product = productService.createProduct(orgId, request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(product);
+        log.info("Creating product in org {} env {}", orgId, envId);
+        Product product = productService.createProduct(orgId, envId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(productService.toResponse(product));
     }
-    
+
     @GetMapping
-    public ResponseEntity<List<Product>> getAllProducts(@PathVariable String orgId) {
-        log.info("GET /api/v1/organizations/{}/products - Fetching all products", orgId);
-        List<Product> products = productService.getProductsByOrganization(orgId);
-        return ResponseEntity.ok(products);
+    public ResponseEntity<List<ProductResponse>> getAllProducts(
+            @PathVariable String orgId,
+            @PathVariable String envId) {
+        log.info("Fetching products for org {} env {}", orgId, envId);
+        List<Product> products = productService.getProductsByEnvironment(orgId, envId);
+        return ResponseEntity.ok(productService.toResponseList(products));
     }
-    
+
     @GetMapping("/{productId}")
-    public ResponseEntity<Product> getProduct(
+    public ResponseEntity<ProductResponse> getProduct(
             @PathVariable String orgId,
+            @PathVariable String envId,
             @PathVariable String productId) {
-        log.info("GET /api/v1/organizations/{}/products/{} - Fetching product", orgId, productId);
+        log.info("Fetching product {} in org {} env {}", productId, orgId, envId);
         Product product = productService.getProductById(orgId, productId);
-        return ResponseEntity.ok(product);
+        return ResponseEntity.ok(productService.toResponse(product));
     }
-    
+
     @PutMapping("/{productId}")
-    public ResponseEntity<Product> updateProduct(
+    public ResponseEntity<ProductResponse> updateProduct(
             @PathVariable String orgId,
+            @PathVariable String envId,
             @PathVariable String productId,
             @Valid @RequestBody CreateProductRequest request) {
-        log.info("PUT /api/v1/organizations/{}/products/{} - Updating product", orgId, productId);
-        Product product = productService.updateProduct(orgId, productId, request);
-        return ResponseEntity.ok(product);
+        log.info("Updating product {} in org {} env {}", productId, orgId, envId);
+        Product product = productService.updateProduct(orgId, envId, productId, request);
+        return ResponseEntity.ok(productService.toResponse(product));
     }
-    
+
     @DeleteMapping("/{productId}")
     public ResponseEntity<Void> deleteProduct(
             @PathVariable String orgId,
+            @PathVariable String envId,
             @PathVariable String productId,
             @RequestParam(required = false, defaultValue = "false") boolean force) {
-        log.info("DELETE /api/v1/organizations/{}/products/{} - Deleting product (force: {})", orgId, productId, force);
-        productService.deleteProduct(orgId, productId, force);
+        log.info("Deleting product {} in org {} env {} (force: {})", productId, orgId, envId, force);
+        productService.deleteProduct(orgId, envId, productId, force);
         return ResponseEntity.noContent().build();
     }
-}
 
+    @PostMapping("/{productId}/clone")
+    public ResponseEntity<ProductResponse> cloneProduct(
+            @PathVariable String orgId,
+            @PathVariable String envId,
+            @PathVariable String productId,
+            @RequestParam String targetEnvId) {
+        log.info("Cloning product {} from env {} to env {} in org {}", productId, envId, targetEnvId, orgId);
+        Product cloned = productService.cloneProduct(orgId, envId, productId, targetEnvId);
+        return ResponseEntity.status(HttpStatus.CREATED).body(productService.toResponse(cloned));
+    }
+}

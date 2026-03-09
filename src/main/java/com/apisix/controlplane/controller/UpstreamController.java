@@ -5,7 +5,7 @@ import com.apisix.controlplane.dto.PaginatedResponse;
 import com.apisix.controlplane.dto.PaginationRequest;
 import com.apisix.controlplane.entity.Upstream;
 import com.apisix.controlplane.service.UpstreamService;
-import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.Hidden;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/orgs/{orgId}/envs/{envId}/upstreams")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
-@Tag(name = "Upstreams")
+@Hidden
 public class UpstreamController {
 
     private final UpstreamService upstreamService;

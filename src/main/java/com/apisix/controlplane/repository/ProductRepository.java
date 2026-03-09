@@ -12,9 +12,9 @@ public interface ProductRepository extends JpaRepository<Product, String> {
 
     List<Product> findByOrgId(String orgId);
 
-    Optional<Product> findByOrgIdAndName(String orgId, String name);
+    List<Product> findByOrgIdAndEnvId(String orgId, String envId);
 
-    boolean existsByOrgIdAndName(String orgId, String name);
+    boolean existsByOrgIdAndEnvIdAndName(String orgId, String envId, String name);
 
     Optional<Product> findByOrgIdAndId(String orgId, String id);
 }

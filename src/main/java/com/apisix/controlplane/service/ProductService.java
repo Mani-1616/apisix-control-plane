@@ -1,6 +1,7 @@
 package com.apisix.controlplane.service;
 
 import com.apisix.controlplane.dto.CreateProductRequest;
+import com.apisix.controlplane.dto.ProductResponse;
 import com.apisix.controlplane.entity.*;
 import com.apisix.controlplane.exception.BusinessException;
 import com.apisix.controlplane.exception.ResourceNotFoundException;
@@ -12,8 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -34,39 +33,34 @@ public class ProductService {
     @Value("${apisix.admin.key}")
     private String adminKey;
 
-    private static final String CONSUMER_GROUP_PREFIX = "grp";
-
     @Transactional
-    public Product createProduct(String orgId, CreateProductRequest request) {
-        log.info("Creating product '{}' for organization: {}", request.getName(), orgId);
+    public Product createProduct(String orgId, String envId, CreateProductRequest request) {
+        log.info("Creating product '{}' for organization: {} in environment: {}", request.getName(), orgId, envId);
 
         if (!organizationRepository.existsById(orgId)) {
             throw new ResourceNotFoundException("Organization not found: " + orgId);
         }
-        if (productRepository.existsByOrgIdAndName(orgId, request.getName())) {
-            throw new BusinessException("Product with name '" + request.getName() + "' already exists");
+
+        Environment environment = environmentRepository.findById(envId)
+                .orElseThrow(() -> new ResourceNotFoundException("Environment not found: " + envId));
+        if (!environment.getOrgId().equals(orgId)) {
+            throw new BusinessException("Environment does not belong to this organization");
         }
 
-        // Validate all services exist and belong to this org
-        for (String serviceId : request.getServiceIds()) {
-            Service svc = apiServiceRepository.findById(serviceId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Service not found: " + serviceId));
-            if (!svc.getOrgId().equals(orgId)) {
-                throw new BusinessException("Service " + serviceId + " does not belong to this organization");
-            }
+        if (productRepository.existsByOrgIdAndEnvIdAndName(orgId, envId, request.getName())) {
+            throw new BusinessException("Product with name '" + request.getName() + "' already exists in this environment");
         }
 
-        if (request.getPluginConfig() != null && !request.getPluginConfig().trim().isEmpty()) {
-            validatePluginConfig(request.getPluginConfig());
-        }
+        validateServiceIds(orgId, request.getServiceIds());
 
         Product product = Product.builder()
                 .orgId(orgId)
+                .envId(envId)
                 .name(request.getName())
                 .description(request.getDescription())
                 .displayName(request.getDisplayName())
                 .serviceIds(request.getServiceIds())
-                .pluginConfig(request.getPluginConfig())
+                .plugins(request.getPlugins())
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
@@ -74,41 +68,37 @@ public class ProductService {
         Product saved = productRepository.save(product);
         log.info("Product created with ID: {}", saved.getId());
 
-        createConsumerGroupsForProduct(orgId, saved);
+        createOrUpdateConsumerGroupForProduct(environment, saved);
 
         return saved;
     }
 
     @Transactional
-    public Product updateProduct(String orgId, String productId, CreateProductRequest request) {
-        Product product = productRepository.findByOrgIdAndId(orgId, productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Product not found: " + productId));
+    public Product updateProduct(String orgId, String envId, String productId, CreateProductRequest request) {
+        Product product = getProductById(orgId, productId);
 
-        for (String serviceId : request.getServiceIds()) {
-            Service svc = apiServiceRepository.findById(serviceId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Service not found: " + serviceId));
-            if (!svc.getOrgId().equals(orgId)) {
-                throw new BusinessException("Service " + serviceId + " does not belong to this organization");
-            }
+        if (!product.getEnvId().equals(envId)) {
+            throw new BusinessException("Product does not belong to this environment");
         }
 
-        if (request.getPluginConfig() != null && !request.getPluginConfig().trim().isEmpty()) {
-            validatePluginConfig(request.getPluginConfig());
-        }
+        validateServiceIds(orgId, request.getServiceIds());
 
         product.setDescription(request.getDescription());
         product.setDisplayName(request.getDisplayName());
         product.setServiceIds(request.getServiceIds());
-        product.setPluginConfig(request.getPluginConfig());
+        product.setPlugins(request.getPlugins());
         product.setUpdatedAt(LocalDateTime.now());
 
-        updateConsumerGroupsForProduct(orgId, product);
+        Environment environment = environmentRepository.findById(envId)
+                .orElseThrow(() -> new ResourceNotFoundException("Environment not found: " + envId));
+
+        createOrUpdateConsumerGroupForProduct(environment, product);
 
         return productRepository.save(product);
     }
 
-    public List<Product> getProductsByOrganization(String orgId) {
-        return productRepository.findByOrgId(orgId);
+    public List<Product> getProductsByEnvironment(String orgId, String envId) {
+        return productRepository.findByOrgIdAndEnvId(orgId, envId);
     }
 
     public Product getProductById(String orgId, String productId) {
@@ -116,10 +106,24 @@ public class ProductService {
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found: " + productId));
     }
 
+    public ProductResponse toResponse(Product product) {
+        List<Service> services = product.getServiceIds() == null
+                ? List.of()
+                : apiServiceRepository.findAllById(product.getServiceIds());
+        return ProductResponse.fromEntity(product, services);
+    }
+
+    public List<ProductResponse> toResponseList(List<Product> products) {
+        return products.stream().map(this::toResponse).toList();
+    }
+
     @Transactional
-    public void deleteProduct(String orgId, String productId, boolean force) {
-        Product product = productRepository.findByOrgIdAndId(orgId, productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Product not found: " + productId));
+    public void deleteProduct(String orgId, String envId, String productId, boolean force) {
+        Product product = getProductById(orgId, productId);
+
+        if (!product.getEnvId().equals(envId)) {
+            throw new BusinessException("Product does not belong to this environment");
+        }
 
         List<ProductSubscription> subscriptions = productSubscriptionRepository.findByOrgIdAndProductId(orgId, productId);
 
@@ -127,12 +131,13 @@ public class ProductService {
             throw new BusinessException("Cannot delete product. " + subscriptions.size() + " subscriptions exist. Use force delete.");
         }
 
+        Environment environment = environmentRepository.findById(envId)
+                .orElseThrow(() -> new ResourceNotFoundException("Environment not found: " + envId));
+
         if (force && !subscriptions.isEmpty()) {
             for (ProductSubscription sub : subscriptions) {
                 try {
-                    Environment env = environmentRepository.findById(sub.getEnvId())
-                            .orElseThrow(() -> new ResourceNotFoundException("Environment not found: " + sub.getEnvId()));
-                    deleteConsumerFromApisix(env, sub.getConsumerId());
+                    deleteConsumerFromApisix(environment, sub.getId());
                     productSubscriptionRepository.delete(sub);
                 } catch (Exception e) {
                     log.error("Failed to delete subscription {}: {}", sub.getId(), e.getMessage());
@@ -140,53 +145,60 @@ public class ProductService {
             }
         }
 
-        deleteConsumerGroupsForProduct(orgId, product);
+        deleteConsumerGroupFromApisix(environment, product.getId());
         productRepository.delete(product);
         log.info("Product deleted: {}", productId);
     }
 
-    private void createConsumerGroupsForProduct(String orgId, Product product) {
-        List<Environment> environments = environmentRepository.findByOrgId(orgId);
-        for (Environment env : environments) {
-            try {
-                String groupId = generateConsumerGroupId(product.getName(), env.getId());
-                List<String> apisixServiceIds = getDeployedApisixServiceIds(orgId, env.getId(), product.getServiceIds());
-                createOrUpdateConsumerGroupInApisix(env, groupId, product.getDisplayName(), apisixServiceIds, product.getPluginConfig());
-            } catch (Exception e) {
-                log.error("Failed to create consumer group in env {}: {}", env.getName(), e.getMessage());
-            }
+    @Transactional
+    public Product cloneProduct(String orgId, String sourceEnvId, String productId, String targetEnvId) {
+        Product source = getProductById(orgId, productId);
+
+        if (!source.getEnvId().equals(sourceEnvId)) {
+            throw new BusinessException("Product does not belong to this environment");
         }
+
+        Environment targetEnv = environmentRepository.findById(targetEnvId)
+                .orElseThrow(() -> new ResourceNotFoundException("Target environment not found: " + targetEnvId));
+        if (!targetEnv.getOrgId().equals(orgId)) {
+            throw new BusinessException("Target environment does not belong to this organization");
+        }
+
+        if (sourceEnvId.equals(targetEnvId)) {
+            throw new BusinessException("Cannot clone product to the same environment");
+        }
+
+        if (productRepository.existsByOrgIdAndEnvIdAndName(orgId, targetEnvId, source.getName())) {
+            throw new BusinessException("Product with name '" + source.getName() + "' already exists in the target environment");
+        }
+
+        Product cloned = Product.builder()
+                .orgId(orgId)
+                .envId(targetEnvId)
+                .name(source.getName())
+                .description(source.getDescription())
+                .displayName(source.getDisplayName())
+                .serviceIds(new ArrayList<>(source.getServiceIds()))
+                .plugins(source.getPlugins() != null ? new HashMap<>(source.getPlugins()) : null)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build();
+
+        Product saved = productRepository.save(cloned);
+        log.info("Product cloned from {} to env {} with new ID: {}", productId, targetEnvId, saved.getId());
+
+        createOrUpdateConsumerGroupForProduct(targetEnv, saved);
+
+        return saved;
     }
 
-    private void updateConsumerGroupsForProduct(String orgId, Product product) {
-        List<Environment> environments = environmentRepository.findByOrgId(orgId);
-        for (Environment env : environments) {
-            try {
-                String groupId = generateConsumerGroupId(product.getName(), env.getId());
-                List<String> apisixServiceIds = getDeployedApisixServiceIds(orgId, env.getId(), product.getServiceIds());
-                createOrUpdateConsumerGroupInApisix(env, groupId, product.getDisplayName(), apisixServiceIds, product.getPluginConfig());
-            } catch (Exception e) {
-                log.error("Failed to update consumer group in env {}: {}", env.getName(), e.getMessage());
-            }
-        }
+    private void createOrUpdateConsumerGroupForProduct(Environment environment, Product product) {
+        List<String> apisixServiceIds = getDeployedApisixServiceIds(product.getEnvId(), product.getServiceIds());
+        createOrUpdateConsumerGroupInApisix(environment, product.getId(), product.getDisplayName(),
+                apisixServiceIds, product.getPlugins());
     }
 
-    private void deleteConsumerGroupsForProduct(String orgId, Product product) {
-        List<Environment> environments = environmentRepository.findByOrgId(orgId);
-        for (Environment env : environments) {
-            try {
-                String groupId = generateConsumerGroupId(product.getName(), env.getId());
-                deleteConsumerGroupFromApisix(env, groupId);
-            } catch (Exception e) {
-                log.warn("Failed to delete consumer group from env {}: {}", env.getName(), e.getMessage());
-            }
-        }
-    }
-
-    /**
-     * Get deployed APISIX service IDs for the given control-plane service IDs.
-     */
-    private List<String> getDeployedApisixServiceIds(String orgId, String envId, List<String> serviceIds) {
+    private List<String> getDeployedApisixServiceIds(String envId, List<String> serviceIds) {
         return serviceIds.stream()
                 .map(serviceId -> {
                     Service svc = apiServiceRepository.findById(serviceId).orElse(null);
@@ -205,7 +217,8 @@ public class ProductService {
     }
 
     private void createOrUpdateConsumerGroupInApisix(Environment environment, String groupId,
-                                                     String displayName, List<String> serviceIds, String pluginConfigJson) {
+                                                     String displayName, List<String> serviceIds,
+                                                     Map<String, Object> customPlugins) {
         WebClient webClient = webClientBuilder
                 .baseUrl(environment.getApisixAdminUrl())
                 .defaultHeader("X-API-KEY", adminKey)
@@ -223,15 +236,8 @@ public class ProductService {
             plugins.put("consumer-restriction", restriction);
         }
 
-        if (pluginConfigJson != null && !pluginConfigJson.trim().isEmpty()) {
-            try {
-                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                @SuppressWarnings("unchecked")
-                Map<String, Object> customPlugins = mapper.readValue(pluginConfigJson, Map.class);
-                plugins.putAll(customPlugins);
-            } catch (Exception e) {
-                throw new BusinessException("Invalid plugin configuration JSON: " + e.getMessage());
-            }
+        if (customPlugins != null) {
+            plugins.putAll(customPlugins);
         }
 
         payload.put("plugins", plugins);
@@ -286,36 +292,14 @@ public class ProductService {
         }
     }
 
-    public String generateConsumerGroupId(String productName, String envId) {
-        String productHash = hashString(productName).substring(0, 8);
-        String envHash = Integer.toHexString(envId.hashCode());
-        envHash = String.format("%8s", envHash).replace(' ', '0');
-        if (envHash.length() > 8) {
-            envHash = envHash.substring(0, 8);
-        }
-        return String.format("%s-%s-%s", CONSUMER_GROUP_PREFIX, productHash, envHash);
-    }
-
-    private String hashString(String input) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
-            StringBuilder result = new StringBuilder();
-            for (byte b : hash) {
-                result.append(String.format("%02x", b));
+    private void validateServiceIds(String orgId, List<String> serviceIds) {
+        for (String serviceId : serviceIds) {
+            Service svc = apiServiceRepository.findById(serviceId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Service not found: " + serviceId));
+            if (!svc.getOrgId().equals(orgId)) {
+                throw new BusinessException("Service " + serviceId + " does not belong to this organization");
             }
-            return result.toString();
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to hash string", e);
         }
     }
 
-    private void validatePluginConfig(String pluginConfigJson) {
-        try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            mapper.readValue(pluginConfigJson, Map.class);
-        } catch (Exception e) {
-            throw new BusinessException("Invalid plugin configuration JSON: " + e.getMessage());
-        }
-    }
 }

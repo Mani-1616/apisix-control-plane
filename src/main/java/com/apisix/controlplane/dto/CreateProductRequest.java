@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotEmpty;
 import lombok.Data;
 
 import java.util.List;
+import java.util.Map;
 
 @Data
 public class CreateProductRequest {
@@ -20,8 +21,5 @@ public class CreateProductRequest {
     @NotEmpty(message = "At least one service must be included in the product")
     private List<String> serviceIds;
 
-    /**
-     * Optional plugin configuration (JSON string) to be applied at consumer group level.
-     */
-    private String pluginConfig;
+    private Map<String, Object> plugins;
 }
