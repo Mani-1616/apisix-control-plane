@@ -1,6 +1,6 @@
 package com.apisix.controlplane.repository;
 
-import com.apisix.controlplane.entity.Service;
+import com.apisix.controlplane.entity.Api;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -10,13 +10,13 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface ApiServiceRepository extends JpaRepository<Service, String> {
+public interface ApiRepository extends JpaRepository<Api, String> {
 
-    List<Service> findByOrgId(String orgId);
+    List<Api> findByOrgId(String orgId);
 
-    Page<Service> findByOrgId(String orgId, Pageable pageable);
+    Page<Api> findByOrgId(String orgId, Pageable pageable);
 
-    Optional<Service> findByOrgIdAndName(String orgId, String name);
+    Optional<Api> findByOrgIdAndName(String orgId, String name);
 
     boolean existsByOrgIdAndName(String orgId, String name);
 }

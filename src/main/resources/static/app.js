@@ -374,7 +374,7 @@ async function loadServicesDropdown() {
     if (!orgId) { select.innerHTML = '<option value="">Select org first</option>'; return; }
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/services?size=1000`);
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/apis?size=1000`);
         const data = await response.json();
         const services = data.content || [];
         servicesCache = services;
@@ -453,7 +453,7 @@ document.getElementById('createServiceForm').addEventListener('submit', async (e
     const displayName = document.getElementById('serviceDisplayName').value;
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/services`, {
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/apis`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, displayName: displayName || null })
@@ -553,7 +553,7 @@ async function createRevision() {
     if (servicePlugins) serviceSpecification.plugins = servicePlugins;
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/revisions`, {
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/apis/${serviceId}/revisions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -637,7 +637,7 @@ async function updateRevision() {
 
     try {
         // Step 1: Update specs
-        const specsResponse = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/revisions/${revisionId}`, {
+        const specsResponse = await fetch(`${API_BASE}/orgs/${orgId}/apis/${serviceId}/revisions/${revisionId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -661,7 +661,7 @@ async function updateRevision() {
         });
 
         if (environmentUpstreams.length > 0) {
-            const bindingsResponse = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/revisions/${revisionId}/upstream-bindings`, {
+            const bindingsResponse = await fetch(`${API_BASE}/orgs/${orgId}/apis/${serviceId}/revisions/${revisionId}/upstream-bindings`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ environmentUpstreams })
@@ -702,7 +702,7 @@ async function loadServices() {
     }
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/services?size=1000`);
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/apis?size=1000`);
         const data = await response.json();
         const services = data.content || [];
         servicesCache = services;
@@ -715,7 +715,7 @@ async function loadServices() {
         // For each service, load its revisions
         let html = '';
         for (const svc of services) {
-            const revResponse = await fetch(`${API_BASE}/orgs/${orgId}/services/${svc.id}/revisions?size=1000`);
+            const revResponse = await fetch(`${API_BASE}/orgs/${orgId}/apis/${svc.id}/revisions?size=1000`);
             const revData = await revResponse.json();
             const revisions = revData.content || [];
 
@@ -768,7 +768,7 @@ async function loadServices() {
 
 async function editRevision(orgId, serviceId, revisionId) {
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/revisions/${revisionId}`);
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/apis/${serviceId}/revisions/${revisionId}`);
         if (!response.ok) throw new Error(await response.text());
         const revision = await response.json();
 
@@ -833,7 +833,7 @@ async function deleteRevision(orgId, serviceId, revisionId) {
     if (!confirm('Are you sure you want to delete this revision?')) return;
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/revisions/${revisionId}`, {
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/apis/${serviceId}/revisions/${revisionId}`, {
             method: 'DELETE'
         });
 
@@ -853,7 +853,7 @@ async function cloneRevision(orgId, serviceId, revisionId, revisionNumber) {
     if (!confirm(`Clone Revision ${revisionNumber}? This will create a new INACTIVE revision with the same configuration.`)) return;
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/revisions/${revisionId}/clone`, {
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/apis/${serviceId}/revisions/${revisionId}/clone`, {
             method: 'POST'
         });
 
@@ -883,7 +883,7 @@ async function loadServicesOverview(page) {
     if (page) overviewPage = page;
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/services/overview?page=${overviewPage}&size=${overviewSize}`);
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/apis/overview?page=${overviewPage}&size=${overviewSize}`);
         if (!response.ok) {
             const error = await response.text();
             document.getElementById('servicesOverviewList').innerHTML = `<p class="error-text">Error: ${error}</p>`;
@@ -999,7 +999,7 @@ async function loadServicesForDeployment() {
     if (!orgId) { select.innerHTML = '<option value="">Select org first</option>'; return; }
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/services?size=1000`);
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/apis?size=1000`);
         const data = await response.json();
         const services = data.content || [];
         servicesCache = services;
@@ -1019,7 +1019,7 @@ async function loadServiceRevisions() {
     if (!serviceId) return;
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/revisions?size=1000`);
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/apis/${serviceId}/revisions?size=1000`);
         const data = await response.json();
         const revisions = data.content || [];
 
@@ -1047,7 +1047,7 @@ async function loadDeploymentData(providedOrgId, providedRevisionId) {
     }
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/revisions/${revisionId}`);
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/apis/${serviceId}/revisions/${revisionId}`);
         const revision = await response.json();
 
         const envsResponse = await fetch(`${API_BASE}/orgs/${orgId}/envs`);
@@ -1190,7 +1190,7 @@ async function saveUpstreamBinding(orgId, serviceId, revisionId, envId) {
     }
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/revisions/${revisionId}/upstream-bindings`, {
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/apis/${serviceId}/revisions/${revisionId}/upstream-bindings`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1232,7 +1232,7 @@ async function deploySingleEnv(orgId, serviceId, revisionId, envId, envName) {
         // Set upstream binding first when not force-deploying (deploy uses existing bindings only).
         // When force-deploying we may already be deployed to this env, so binding updates are not allowed.
         if (!forceValue) {
-            const bindingsResponse = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/revisions/${revisionId}/upstream-bindings`, {
+            const bindingsResponse = await fetch(`${API_BASE}/orgs/${orgId}/apis/${serviceId}/revisions/${revisionId}/upstream-bindings`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1247,7 +1247,7 @@ async function deploySingleEnv(orgId, serviceId, revisionId, envId, envName) {
             }
         }
 
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/revisions/${revisionId}/deploy`, {
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/apis/${serviceId}/revisions/${revisionId}/deploy`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1272,7 +1272,7 @@ async function undeploySingleEnv(orgId, serviceId, revisionId, envId, envName) {
     if (!confirm(`Undeploy from ${envName}?`)) return;
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/revisions/${revisionId}/undeploy`, {
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/apis/${serviceId}/revisions/${revisionId}/undeploy`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ environmentId: envId })
@@ -1410,7 +1410,7 @@ document.getElementById('createSubscriptionForm').addEventListener('submit', asy
     const serviceId = document.getElementById('subServiceId').value;
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/subscriptions`, {
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/apis/${serviceId}/subscriptions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ developerId, envId })
@@ -1474,13 +1474,13 @@ async function loadServicesForSubscription() {
 
     try {
         // Get all services and check which have deployed revisions in this env
-        const svcResponse = await fetch(`${API_BASE}/orgs/${orgId}/services?size=1000`);
+        const svcResponse = await fetch(`${API_BASE}/orgs/${orgId}/apis?size=1000`);
         const svcData = await svcResponse.json();
         const services = svcData.content || [];
 
         const deployedServices = [];
         for (const svc of services) {
-            const revResponse = await fetch(`${API_BASE}/orgs/${orgId}/services/${svc.id}/revisions?size=1000`);
+            const revResponse = await fetch(`${API_BASE}/orgs/${orgId}/apis/${svc.id}/revisions?size=1000`);
             const revData = await revResponse.json();
             const revisions = revData.content || [];
             const hasDeployed = revisions.some(rev =>
@@ -1565,7 +1565,7 @@ async function ensureServicesCacheLoaded() {
     const orgId = getCurrentOrgId();
     if (!orgId) return;
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/services?size=1000`);
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/apis?size=1000`);
         const data = await response.json();
         servicesCache = data.content || [];
     } catch (error) {
@@ -1659,7 +1659,7 @@ async function revokeSubscription(orgId, serviceId, subscriptionId) {
     if (!confirm('Revoke this subscription?')) return;
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/subscriptions/${subscriptionId}`, { method: 'DELETE' });
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/apis/${serviceId}/subscriptions/${subscriptionId}`, { method: 'DELETE' });
         if (response.ok) {
             showNotification('success', 'Revoked', 'Subscription revoked');
             loadSubscriptions();
@@ -1675,7 +1675,7 @@ async function grantSubscription(orgId, serviceId, subscriptionId) {
     if (!confirm('Grant access again?')) return;
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/services/${serviceId}/subscriptions/${subscriptionId}/grant`, { method: 'PUT' });
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/apis/${serviceId}/subscriptions/${subscriptionId}/grant`, { method: 'PUT' });
         if (response.ok) {
             showNotification('success', 'Granted', 'Access granted');
             loadSubscriptions();
@@ -1768,7 +1768,7 @@ async function loadServicesForProductSelection() {
     if (!orgId) return;
 
     try {
-        const response = await fetch(`${API_BASE}/orgs/${orgId}/services?size=1000`);
+        const response = await fetch(`${API_BASE}/orgs/${orgId}/apis?size=1000`);
         const data = await response.json();
         const services = data.content || [];
         servicesCache = services;
@@ -1826,7 +1826,7 @@ document.getElementById('createProductForm').addEventListener('submit', async (e
         name: document.getElementById('productName').value,
         displayName: document.getElementById('productDisplayName').value,
         description: document.getElementById('productDescription').value,
-        serviceIds: selectedServiceIds,
+        apiIds: selectedServiceIds,
         plugins: plugins
     };
 
@@ -1906,21 +1906,17 @@ async function loadProductSubscriptions() {
     const developerId = document.getElementById('prodSubFilterDeveloperId')?.value || '';
     const envId = document.getElementById('prodSubFilterEnvId')?.value || '';
 
-    if (!envId) {
-        document.getElementById('productSubscriptionsList').innerHTML =
-            '<p class="info-text">Please select an environment</p>';
-        return;
-    }
-
     try {
-        let url = `${API_BASE}/orgs/${orgId}/envs/${envId}/products/_/subscriptions`;
+        let url = `${API_BASE}/orgs/${orgId}/products/subscriptions`;
         const params = new URLSearchParams();
         if (developerId) params.append('developerId', developerId);
-        if (params.toString()) url += `?${params.toString()}`;
+        if (envId) params.append('envId', envId);
+        params.append('size', '1000');
+        url += `?${params.toString()}`;
 
         const response = await fetch(url);
-        const subscriptions = await response.json();
-        displayProductSubscriptions(subscriptions, orgId);
+        const data = await response.json();
+        displayProductSubscriptions(data.content || [], orgId);
     } catch (error) {
         console.error('Error:', error);
     }

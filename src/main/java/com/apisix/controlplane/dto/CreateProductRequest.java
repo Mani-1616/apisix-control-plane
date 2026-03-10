@@ -19,7 +19,7 @@ public class CreateProductRequest {
     private String displayName;
 
     @NotEmpty(message = "At least one service must be included in the product")
-    private List<String> serviceIds;
+    private List<String> apiIds;
 
     private Map<String, Object> plugins;
 }

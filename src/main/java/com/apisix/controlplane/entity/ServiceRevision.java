@@ -18,7 +18,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * A versioned revision of an {@link Service}.
+ * A versioned revision of an {@link Api}.
  * Each revision contains APISIX service and route specifications stored as typed JSONB.
  * Deployment status is tracked via the {@link Deployment} entity.
  * Upstream bindings per environment are tracked via the {@link UpstreamBinding} entity.
@@ -29,7 +29,7 @@ import java.util.List;
 @AllArgsConstructor
 @Entity
 @Table(name = "service_revisions", uniqueConstraints = {
-    @UniqueConstraint(name = "uk_service_revision_svc_num", columnNames = {"service_id", "revision_number"})
+    @UniqueConstraint(name = "uk_service_revision_api_num", columnNames = {"api_id", "revision_number"})
 }, indexes = {
     @Index(name = "idx_service_revision_org", columnList = "org_id")
 })
@@ -43,8 +43,8 @@ public class ServiceRevision {
     @Column(name = "org_id", nullable = false)
     private String orgId;
 
-    @Column(name = "service_id", nullable = false)
-    private String serviceId;
+    @Column(name = "api_id", nullable = false)
+    private String apiId;
 
     @Column(name = "revision_number", nullable = false)
     private Integer revisionNumber;

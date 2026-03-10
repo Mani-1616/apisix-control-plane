@@ -26,13 +26,13 @@ public class APISubscriptionController {
 
     private final APISubscriptionService subscriptionService;
 
-    @PostMapping("/services/{serviceId}/subscriptions")
+    @PostMapping("/apis/{apiId}/subscriptions")
     public ResponseEntity<APISubscription> createSubscription(
             @PathVariable String orgId,
-            @PathVariable String serviceId,
+            @PathVariable String apiId,
             @Valid @RequestBody CreateSubscriptionRequest request) {
-        log.info("POST /api/orgs/{}/services/{}/subscriptions - Creating subscription", orgId, serviceId);
-        APISubscription subscription = subscriptionService.createSubscription(orgId, serviceId, request);
+        log.info("POST /api/orgs/{}/apis/{}/subscriptions - Creating subscription", orgId, apiId);
+        APISubscription subscription = subscriptionService.createSubscription(orgId, apiId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(subscription);
     }
 
@@ -50,35 +50,35 @@ public class APISubscriptionController {
         return ResponseEntity.ok(PaginatedResponse.from(page, page.getContent()));
     }
 
-    @GetMapping("/services/{serviceId}/subscriptions")
-    public ResponseEntity<PaginatedResponse<APISubscription>> getSubscriptionsByService(
+    @GetMapping("/apis/{apiId}/subscriptions")
+    public ResponseEntity<PaginatedResponse<APISubscription>> getSubscriptionsByApi(
             @PathVariable String orgId,
-            @PathVariable String serviceId,
+            @PathVariable String apiId,
             @Valid @ModelAttribute PaginationRequest pagination) {
-        log.info("GET /api/orgs/{}/services/{}/subscriptions - Fetching subscriptions for service", orgId, serviceId);
-        Page<APISubscription> page = subscriptionService.getSubscriptionsByService(
-                orgId, serviceId,
+        log.info("GET /api/orgs/{}/apis/{}/subscriptions - Fetching subscriptions for API", orgId, apiId);
+        Page<APISubscription> page = subscriptionService.getSubscriptionsByApi(
+                orgId, apiId,
                 pagination.toPageable().withSort(Sort.by(Sort.Direction.DESC, "createdAt")));
         return ResponseEntity.ok(PaginatedResponse.from(page, page.getContent()));
     }
 
-    @DeleteMapping("/services/{serviceId}/subscriptions/{subscriptionId}")
+    @DeleteMapping("/apis/{apiId}/subscriptions/{subscriptionId}")
     public ResponseEntity<Void> revokeSubscription(
             @PathVariable String orgId,
-            @PathVariable String serviceId,
+            @PathVariable String apiId,
             @PathVariable String subscriptionId) {
-        log.info("DELETE /api/orgs/{}/services/{}/subscriptions/{} - Revoking subscription", orgId, serviceId, subscriptionId);
+        log.info("DELETE /api/orgs/{}/apis/{}/subscriptions/{} - Revoking subscription", orgId, apiId, subscriptionId);
         subscriptionService.revokeSubscription(orgId, subscriptionId);
         return ResponseEntity.noContent().build();
     }
 
     @Hidden
-    @PutMapping("/services/{serviceId}/subscriptions/{subscriptionId}/grant")
+    @PutMapping("/apis/{apiId}/subscriptions/{subscriptionId}/grant")
     public ResponseEntity<APISubscription> grantSubscription(
             @PathVariable String orgId,
-            @PathVariable String serviceId,
+            @PathVariable String apiId,
             @PathVariable String subscriptionId) {
-        log.info("PUT /api/orgs/{}/services/{}/subscriptions/{}/grant - Granting subscription", orgId, serviceId, subscriptionId);
+        log.info("PUT /api/orgs/{}/apis/{}/subscriptions/{}/grant - Granting subscription", orgId, apiId, subscriptionId);
         APISubscription subscription = subscriptionService.grantSubscription(orgId, subscriptionId);
         return ResponseEntity.ok(subscription);
     }

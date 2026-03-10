@@ -1,6 +1,6 @@
 package com.apisix.controlplane.dto;
 
-import com.apisix.controlplane.entity.Service;
+import com.apisix.controlplane.entity.Api;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -13,7 +13,7 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ServiceWithRevisionsResponse {
+public class ApiWithRevisionsResponse {
 
     private String id;
     private String name;
@@ -22,13 +22,13 @@ public class ServiceWithRevisionsResponse {
     private LocalDateTime updatedAt;
     private List<RevisionSummary> revisions;
 
-    public static ServiceWithRevisionsResponse fromEntity(Service service, List<RevisionSummary> revisions) {
-        return ServiceWithRevisionsResponse.builder()
-                .id(service.getId())
-                .name(service.getName())
-                .displayName(service.getDisplayName())
-                .createdAt(service.getCreatedAt())
-                .updatedAt(service.getUpdatedAt())
+    public static ApiWithRevisionsResponse fromEntity(Api api, List<RevisionSummary> revisions) {
+        return ApiWithRevisionsResponse.builder()
+                .id(api.getId())
+                .name(api.getName())
+                .displayName(api.getDisplayName())
+                .createdAt(api.getCreatedAt())
+                .updatedAt(api.getUpdatedAt())
                 .revisions(revisions)
                 .build();
     }

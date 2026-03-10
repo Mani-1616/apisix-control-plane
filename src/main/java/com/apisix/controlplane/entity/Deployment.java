@@ -21,7 +21,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Entity
 @Table(name = "deployments", uniqueConstraints = {
-    @UniqueConstraint(name = "uk_deployment_svc_env", columnNames = {"service_id", "environment_id"})
+    @UniqueConstraint(name = "uk_deployment_api_env", columnNames = {"api_id", "environment_id"})
 }, indexes = {
     @Index(name = "idx_deployment_env", columnList = "environment_id"),
     @Index(name = "idx_deployment_rev", columnList = "revision_id"),
@@ -37,8 +37,8 @@ public class Deployment {
     @Column(name = "org_id", nullable = false)
     private String orgId;
 
-    @Column(name = "service_id", nullable = false)
-    private String serviceId;
+    @Column(name = "api_id", nullable = false)
+    private String apiId;
 
     @Column(name = "revision_id", nullable = false)
     private String revisionId;

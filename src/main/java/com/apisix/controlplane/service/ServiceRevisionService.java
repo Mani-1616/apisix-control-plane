@@ -36,34 +36,31 @@ public class ServiceRevisionService {
     private final UpstreamBindingRepository upstreamBindingRepository;
     private final EnvironmentRepository environmentRepository;
     private final UpstreamRepository upstreamRepository;
-    private final ApiServiceService apiServiceService;
+    private final ApiService apiService;
     private final EnvironmentService environmentService;
     private final ApisixIntegrationService apisixIntegrationService;
     private final UpstreamService upstreamService;
 
     @Transactional
-    public ServiceRevisionResponse createRevision(String serviceId, CreateServiceRevisionRequest request) {
-        log.info("Creating revision for service: {}", serviceId);
+    public ServiceRevisionResponse createRevision(String apiId, CreateServiceRevisionRequest request) {
+        log.info("Creating revision for API: {}", apiId);
 
-        Service service = apiServiceService.getServiceById(serviceId);
+        Api api = apiService.getApiById(apiId);
 
-        // Determine next revision number
         int nextRevisionNumber = revisionRepository
-                .findFirstByServiceIdOrderByRevisionNumberDesc(serviceId)
+                .findFirstByApiIdOrderByRevisionNumberDesc(apiId)
                 .map(rev -> rev.getRevisionNumber() + 1)
                 .orElse(1);
 
-        // Validate routes
         if (request.getRouteSpecifications() == null || request.getRouteSpecifications().isEmpty()) {
             throw new BusinessException("At least one route specification is required");
         }
 
-        // Stamp each route with the APISIX service_id (Postgres service UUID)
-        stampServiceIdOnRoutes(request.getRouteSpecifications(), serviceId);
+        stampServiceIdOnRoutes(request.getRouteSpecifications(), apiId);
 
         ServiceRevision revision = ServiceRevision.builder()
-                .orgId(service.getOrgId())
-                .serviceId(serviceId)
+                .orgId(api.getOrgId())
+                .apiId(apiId)
                 .revisionNumber(nextRevisionNumber)
                 .state(RevisionState.INACTIVE)
                 .serviceSpecification(request.getServiceSpecification())
@@ -86,8 +83,8 @@ public class ServiceRevisionService {
                 }
 
                 UpstreamBinding binding = UpstreamBinding.builder()
-                        .orgId(service.getOrgId())
-                        .serviceId(serviceId)
+                        .orgId(api.getOrgId())
+                        .apiId(apiId)
                         .revisionId(saved.getId())
                         .environmentId(envId)
                         .upstreamId(upstreamId)
@@ -121,7 +118,7 @@ public class ServiceRevisionService {
             throw new BusinessException("At least one route specification is required");
         }
 
-        stampServiceIdOnRoutes(request.getRouteSpecifications(), revision.getServiceId());
+        stampServiceIdOnRoutes(request.getRouteSpecifications(), revision.getApiId());
 
         revision.setServiceSpecification(request.getServiceSpecification());
         revision.setRouteSpecifications(request.getRouteSpecifications());
@@ -158,7 +155,7 @@ public class ServiceRevisionService {
                 throw new BusinessException("Upstream " + upstreamId + " does not belong to environment " + envId);
             }
 
-            upsertUpstreamBinding(revision.getOrgId(), revision.getServiceId(), revisionId, envId, upstreamId);
+            upsertUpstreamBinding(revision.getOrgId(), revision.getApiId(), revisionId, envId, upstreamId);
         }
 
         log.info("Revision {} upstream bindings updated", revisionId);
@@ -172,13 +169,13 @@ public class ServiceRevisionService {
         ServiceRevision source = findRevisionById(revisionId);
 
         int nextRevisionNumber = revisionRepository
-                .findFirstByServiceIdOrderByRevisionNumberDesc(source.getServiceId())
+                .findFirstByApiIdOrderByRevisionNumberDesc(source.getApiId())
                 .map(rev -> rev.getRevisionNumber() + 1)
                 .orElse(source.getRevisionNumber() + 1);
 
         ServiceRevision cloned = ServiceRevision.builder()
                 .orgId(source.getOrgId())
-                .serviceId(source.getServiceId())
+                .apiId(source.getApiId())
                 .revisionNumber(nextRevisionNumber)
                 .state(RevisionState.INACTIVE)
                 .serviceSpecification(source.getServiceSpecification())
@@ -193,7 +190,7 @@ public class ServiceRevisionService {
         for (UpstreamBinding sourceBinding : sourceBindings) {
             UpstreamBinding newBinding = UpstreamBinding.builder()
                     .orgId(sourceBinding.getOrgId())
-                    .serviceId(sourceBinding.getServiceId())
+                    .apiId(sourceBinding.getApiId())
                     .revisionId(saved.getId())
                     .environmentId(sourceBinding.getEnvironmentId())
                     .upstreamId(sourceBinding.getUpstreamId())
@@ -230,25 +227,22 @@ public class ServiceRevisionService {
     @Transactional
     public ServiceRevisionResponse deployRevision(String revisionId, DeployRequest request) {
         ServiceRevision revision = findRevisionById(revisionId);
-        Service service = apiServiceService.getServiceById(revision.getServiceId());
+        Api api = apiService.getApiById(revision.getApiId());
 
         String envId = request.getEnvironmentId();
-        log.info("Deploying revision {} (Rev {}) of service '{}' to environment {}",
-                revisionId, revision.getRevisionNumber(), service.getName(), envId);
+        log.info("Deploying revision {} (Rev {}) of API '{}' to environment {}",
+                revisionId, revision.getRevisionNumber(), api.getName(), envId);
 
-        // Upstream bindings must be set beforehand via the update upstream bindings endpoint.
         var environment = environmentService.getEnvironmentById(envId);
 
-        // Resolve upstream from UpstreamBinding (single source of truth)
         UpstreamBinding binding = upstreamBindingRepository
                 .findByRevisionIdAndEnvironmentId(revisionId, envId)
                 .orElseThrow(() -> new BusinessException("Upstream not configured for environment: " + envId));
 
         var upstream = upstreamService.getUpstreamById(binding.getUpstreamId());
 
-        // Check for conflicting deployment (another revision deployed to same service+env)
         Optional<Deployment> existingDeployment = deploymentRepository
-                .findByServiceIdAndEnvironmentId(revision.getServiceId(), envId);
+                .findByApiIdAndEnvironmentId(revision.getApiId(), envId);
 
         if (existingDeployment.isPresent()) {
             Deployment existing = existingDeployment.get();
@@ -273,7 +267,7 @@ public class ServiceRevisionService {
 
             if (oldBinding != null) {
                 try {
-                    apisixIntegrationService.undeployServiceAndRoutes(environment, oldRevision, service);
+                    apisixIntegrationService.undeployServiceAndRoutes(environment, oldRevision, api);
                 } catch (Exception e) {
                     throw new BusinessException("Failed to auto-undeploy old revision: " + e.getMessage());
                 }
@@ -286,7 +280,7 @@ public class ServiceRevisionService {
 
         // Deploy to APISIX
         try {
-            apisixIntegrationService.deployServiceAndRoutes(environment, revision, service, upstream);
+            apisixIntegrationService.deployServiceAndRoutes(environment, revision, api, upstream);
         } catch (Exception e) {
             throw new BusinessException("Deployment failed for environment " + envId + ": " + e.getMessage());
         }
@@ -294,7 +288,7 @@ public class ServiceRevisionService {
         // Create Deployment record
         Deployment deployment = Deployment.builder()
                 .orgId(revision.getOrgId())
-                .serviceId(revision.getServiceId())
+                .apiId(revision.getApiId())
                 .revisionId(revisionId)
                 .environmentId(envId)
                 .build();
@@ -311,7 +305,7 @@ public class ServiceRevisionService {
     @Transactional
     public ServiceRevisionResponse undeployRevision(String revisionId, UndeployRequest request) {
         ServiceRevision revision = findRevisionById(revisionId);
-        Service service = apiServiceService.getServiceById(revision.getServiceId());
+        Api api = apiService.getApiById(revision.getApiId());
 
         String envId = request.getEnvironmentId();
         log.info("Undeploying revision {} (Rev {}) from environment {}",
@@ -320,7 +314,7 @@ public class ServiceRevisionService {
         var environment = environmentService.getEnvironmentById(envId);
 
         Optional<Deployment> existingDeployment = deploymentRepository
-                .findByServiceIdAndEnvironmentId(revision.getServiceId(), envId);
+                .findByApiIdAndEnvironmentId(revision.getApiId(), envId);
 
         if (existingDeployment.isEmpty() || !existingDeployment.get().getRevisionId().equals(revisionId)) {
             log.warn("Rev {} not deployed to env {}, skipping", revision.getRevisionNumber(), envId);
@@ -332,7 +326,7 @@ public class ServiceRevisionService {
 
             if (binding != null) {
                 try {
-                    apisixIntegrationService.undeployServiceAndRoutes(environment, revision, service);
+                    apisixIntegrationService.undeployServiceAndRoutes(environment, revision, api);
                 } catch (Exception e) {
                     throw new BusinessException("Undeployment failed for environment " + envId + ": " + e.getMessage());
                 }
@@ -353,13 +347,13 @@ public class ServiceRevisionService {
         return toResponse(findRevisionById(revisionId));
     }
 
-    public List<ServiceRevisionResponse> getRevisionsByService(String serviceId) {
-        List<ServiceRevision> revisions = revisionRepository.findByServiceIdOrderByRevisionNumberDesc(serviceId);
+    public List<ServiceRevisionResponse> getRevisionsByApi(String apiId) {
+        List<ServiceRevision> revisions = revisionRepository.findByApiIdOrderByRevisionNumberDesc(apiId);
         return revisions.stream().map(this::toResponse).toList();
     }
 
-    public PaginatedResponse<ServiceRevisionResponse> getRevisionsByService(String serviceId, Pageable pageable) {
-        Page<ServiceRevision> page = revisionRepository.findByServiceId(serviceId, pageable);
+    public PaginatedResponse<ServiceRevisionResponse> getRevisionsByApi(String apiId, Pageable pageable) {
+        Page<ServiceRevision> page = revisionRepository.findByApiId(apiId, pageable);
         List<ServiceRevisionResponse> content = page.getContent().stream()
                 .map(this::toResponse)
                 .toList();
@@ -367,19 +361,19 @@ public class ServiceRevisionService {
     }
 
     /**
-     * Batch-fetch revision summaries (without specs) for multiple services at once.
-     * Returns a map of serviceId to its list of RevisionSummary DTOs.
+     * Batch-fetch revision summaries (without specs) for multiple APIs at once.
+     * Returns a map of apiId to its list of RevisionSummary DTOs.
      */
-    public Map<String, List<RevisionSummary>> getRevisionSummariesByServiceIds(List<String> serviceIds) {
-        if (serviceIds == null || serviceIds.isEmpty()) {
+    public Map<String, List<RevisionSummary>> getRevisionSummariesByApiIds(List<String> apiIds) {
+        if (apiIds == null || apiIds.isEmpty()) {
             return Map.of();
         }
 
         List<ServiceRevision> allRevisions = revisionRepository
-                .findByServiceIdInOrderByServiceIdAscRevisionNumberDesc(serviceIds);
+                .findByApiIdInOrderByApiIdAscRevisionNumberDesc(apiIds);
 
         if (allRevisions.isEmpty()) {
-            return serviceIds.stream().collect(Collectors.toMap(id -> id, id -> List.of()));
+            return apiIds.stream().collect(Collectors.toMap(id -> id, id -> List.of()));
         }
 
         // Collect all revision IDs for batch lookups
@@ -437,7 +431,7 @@ public class ServiceRevisionService {
             List<UpstreamBindingResponse> bindResponses = toBindingResponses(binds, envMap, upstreamMap);
 
             RevisionSummary summary = RevisionSummary.fromEntity(revision, depResponses, bindResponses);
-            result.computeIfAbsent(revision.getServiceId(), k -> new ArrayList<>()).add(summary);
+            result.computeIfAbsent(revision.getApiId(), k -> new ArrayList<>()).add(summary);
         }
 
         return result;
@@ -464,7 +458,7 @@ public class ServiceRevisionService {
     /**
      * Upsert an upstream binding for a revision + environment.
      */
-    private void upsertUpstreamBinding(String orgId, String serviceId, String revisionId, String envId, String upstreamId) {
+    private void upsertUpstreamBinding(String orgId, String apiId, String revisionId, String envId, String upstreamId) {
         Optional<UpstreamBinding> existing = upstreamBindingRepository
                 .findByRevisionIdAndEnvironmentId(revisionId, envId);
 
@@ -475,7 +469,7 @@ public class ServiceRevisionService {
         } else {
             UpstreamBinding binding = UpstreamBinding.builder()
                     .orgId(orgId)
-                    .serviceId(serviceId)
+                    .apiId(apiId)
                     .revisionId(revisionId)
                     .environmentId(envId)
                     .upstreamId(upstreamId)
@@ -546,10 +540,10 @@ public class ServiceRevisionService {
      * Uses the Postgres ApiService UUID as the APISIX service identifier,
      * satisfying the schema requirement that each route references a service.
      */
-    private void stampServiceIdOnRoutes(List<RouteSpec> routes, String serviceId) {
+    private void stampServiceIdOnRoutes(List<RouteSpec> routes, String apiId) {
         if (routes == null) return;
         for (RouteSpec route : routes) {
-            route.setServiceId(serviceId);
+            route.setServiceId(apiId);
         }
     }
 }

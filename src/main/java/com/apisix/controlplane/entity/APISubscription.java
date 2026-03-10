@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "api_subscriptions", uniqueConstraints = {
-    @UniqueConstraint(name = "uk_api_sub_org_dev_svc_env", columnNames = {"org_id", "developer_id", "service_id", "env_id"})
+    @UniqueConstraint(name = "uk_api_sub_org_dev_api_env", columnNames = {"org_id", "developer_id", "api_id", "env_id"})
 }, indexes = {
     @Index(name = "idx_api_sub_org_env_dev", columnList = "org_id, env_id, developer_id"),
     @Index(name = "idx_api_sub_org_dev", columnList = "org_id, developer_id")
@@ -35,8 +35,8 @@ public class APISubscription {
     @Column(name = "developer_id", nullable = false)
     private String developerId;
 
-    @Column(name = "service_id", nullable = false)
-    private String serviceId;
+    @Column(name = "api_id", nullable = false)
+    private String apiId;
 
     @Enumerated(EnumType.STRING)
     private SubscriptionStatus status;

@@ -26,7 +26,7 @@ public class ProductService {
     private final ProductSubscriptionRepository productSubscriptionRepository;
     private final OrganizationRepository organizationRepository;
     private final EnvironmentRepository environmentRepository;
-    private final ApiServiceRepository apiServiceRepository;
+    private final ApiRepository apiRepository;
     private final DeploymentRepository deploymentRepository;
     private final WebClient.Builder webClientBuilder;
 
@@ -51,7 +51,8 @@ public class ProductService {
             throw new BusinessException("Product with name '" + request.getName() + "' already exists in this environment");
         }
 
-        validateServiceIds(orgId, request.getServiceIds());
+        validateServiceIds(orgId, request.getApiIds());
+        List<Api> apis = apiRepository.findAllById(request.getApiIds());
 
         Product product = Product.builder()
                 .orgId(orgId)
@@ -59,7 +60,7 @@ public class ProductService {
                 .name(request.getName())
                 .description(request.getDescription())
                 .displayName(request.getDisplayName())
-                .serviceIds(request.getServiceIds())
+                .apis(apis)
                 .plugins(request.getPlugins())
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
@@ -81,11 +82,12 @@ public class ProductService {
             throw new BusinessException("Product does not belong to this environment");
         }
 
-        validateServiceIds(orgId, request.getServiceIds());
+        validateServiceIds(orgId, request.getApiIds());
+        List<Api> apis = apiRepository.findAllById(request.getApiIds());
 
         product.setDescription(request.getDescription());
         product.setDisplayName(request.getDisplayName());
-        product.setServiceIds(request.getServiceIds());
+        product.setApis(apis);
         product.setPlugins(request.getPlugins());
         product.setUpdatedAt(LocalDateTime.now());
 
@@ -107,10 +109,7 @@ public class ProductService {
     }
 
     public ProductResponse toResponse(Product product) {
-        List<Service> services = product.getServiceIds() == null
-                ? List.of()
-                : apiServiceRepository.findAllById(product.getServiceIds());
-        return ProductResponse.fromEntity(product, services);
+        return ProductResponse.fromEntity(product);
     }
 
     public List<ProductResponse> toResponseList(List<Product> products) {
@@ -178,7 +177,7 @@ public class ProductService {
                 .name(source.getName())
                 .description(source.getDescription())
                 .displayName(source.getDisplayName())
-                .serviceIds(new ArrayList<>(source.getServiceIds()))
+                .apis(new ArrayList<>(source.getApis()))
                 .plugins(source.getPlugins() != null ? new HashMap<>(source.getPlugins()) : null)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
@@ -193,23 +192,20 @@ public class ProductService {
     }
 
     private void createOrUpdateConsumerGroupForProduct(Environment environment, Product product) {
-        List<String> apisixServiceIds = getDeployedApisixServiceIds(product.getEnvId(), product.getServiceIds());
+        List<String> apisixServiceIds = getDeployedApisixServiceIds(product.getEnvId(), product.getApis());
         createOrUpdateConsumerGroupInApisix(environment, product.getId(), product.getDisplayName(),
                 apisixServiceIds, product.getPlugins());
     }
 
-    private List<String> getDeployedApisixServiceIds(String envId, List<String> serviceIds) {
-        return serviceIds.stream()
-                .map(serviceId -> {
-                    Service svc = apiServiceRepository.findById(serviceId).orElse(null);
-                    if (svc == null) return null;
-
-                    boolean deployed = deploymentRepository.existsByServiceIdAndEnvironmentId(serviceId, envId);
+    private List<String> getDeployedApisixServiceIds(String envId, List<Api> apis) {
+        return apis.stream()
+                .map(api -> {
+                    boolean deployed = deploymentRepository.existsByApiIdAndEnvironmentId(api.getId(), envId);
                     if (!deployed) {
-                        log.warn("Service '{}' not deployed in env {}, skipping", svc.getName(), envId);
+                        log.warn("API '{}' not deployed in env {}, skipping", api.getName(), envId);
                         return null;
                     }
-                    return svc.getId();
+                    return api.getId();
                 })
                 .filter(Objects::nonNull)
                 .distinct()
@@ -294,10 +290,10 @@ public class ProductService {
 
     private void validateServiceIds(String orgId, List<String> serviceIds) {
         for (String serviceId : serviceIds) {
-            Service svc = apiServiceRepository.findById(serviceId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Service not found: " + serviceId));
+            Api svc = apiRepository.findById(serviceId)
+                    .orElseThrow(() -> new ResourceNotFoundException("API not found: " + serviceId));
             if (!svc.getOrgId().equals(orgId)) {
-                throw new BusinessException("Service " + serviceId + " does not belong to this organization");
+                throw new BusinessException("API " + serviceId + " does not belong to this organization");
             }
         }
     }

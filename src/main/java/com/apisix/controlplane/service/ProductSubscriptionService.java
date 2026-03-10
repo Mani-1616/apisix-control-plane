@@ -14,6 +14,8 @@ import com.apisix.controlplane.repository.ProductSubscriptionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -104,15 +106,24 @@ public class ProductSubscriptionService {
         return saved;
     }
 
-    public List<ProductSubscription> getSubscriptionsByOrganization(String orgId, String envId, String developerId) {
-        log.info("Fetching product subscriptions for org {} env {} (developerId: {})", orgId, envId, developerId);
+    public Page<ProductSubscription> getSubscriptionsByOrganization(String orgId, String envId, String developerId, Pageable pageable) {
+        log.info("Fetching product subscriptions for org {} (envId: {}, developerId: {})", orgId, envId, developerId);
 
-        if (developerId != null && !developerId.isEmpty()) {
-            developerService.getDeveloperById(orgId, developerId);
-            return subscriptionRepository.findByOrgIdAndDeveloperIdAndEnvId(orgId, developerId, envId);
+        if (developerId != null && !developerId.isEmpty() && envId != null && !envId.isEmpty()) {
+            return subscriptionRepository.findByOrgIdAndDeveloperIdAndEnvId(orgId, developerId, envId, pageable);
         }
+        if (developerId != null && !developerId.isEmpty()) {
+            return subscriptionRepository.findByOrgIdAndDeveloperId(orgId, developerId, pageable);
+        }
+        if (envId != null && !envId.isEmpty()) {
+            return subscriptionRepository.findByOrgIdAndEnvId(orgId, envId, pageable);
+        }
+        return subscriptionRepository.findByOrgId(orgId, pageable);
+    }
 
-        return subscriptionRepository.findByOrgIdAndEnvId(orgId, envId);
+    public Page<ProductSubscription> getSubscriptionsByProduct(String orgId, String productId, Pageable pageable) {
+        log.info("Fetching product subscriptions for org {} product {}", orgId, productId);
+        return subscriptionRepository.findByOrgIdAndProductId(orgId, productId, pageable);
     }
 
     @Transactional

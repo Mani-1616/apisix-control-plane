@@ -31,7 +31,7 @@ public class APISubscriptionService {
     private final DeveloperService developerService;
     private final EnvironmentRepository environmentRepository;
     private final DeploymentRepository deploymentRepository;
-    private final ApiServiceService apiServiceService;
+    private final ApiService apiService;
     private final WebClient.Builder webClientBuilder;
 
     @Value("${apisix.admin.key}")
@@ -40,9 +40,9 @@ public class APISubscriptionService {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     @Transactional
-    public APISubscription createSubscription(String orgId, String serviceId, CreateSubscriptionRequest request) {
-        log.info("Creating subscription for developer {} to service {} in environment {} (org: {})",
-                request.getDeveloperId(), serviceId, request.getEnvId(), orgId);
+    public APISubscription createSubscription(String orgId, String apiId, CreateSubscriptionRequest request) {
+        log.info("Creating subscription for developer {} to API {} in environment {} (org: {})",
+                request.getDeveloperId(), apiId, request.getEnvId(), orgId);
 
         developerService.getDeveloperById(orgId, request.getDeveloperId());
 
@@ -52,14 +52,14 @@ public class APISubscriptionService {
             throw new BusinessException("Environment does not belong to this organization");
         }
 
-        Service service = apiServiceService.getServiceById(serviceId);
-        if (!service.getOrgId().equals(orgId)) {
-            throw new BusinessException("Service does not belong to this organization");
+        Api api = apiService.getApiById(apiId);
+        if (!api.getOrgId().equals(orgId)) {
+            throw new BusinessException("API does not belong to this organization");
         }
 
         Optional<APISubscription> existing = subscriptionRepository
-                .findByOrgIdAndDeveloperIdAndServiceIdAndEnvId(
-                        orgId, request.getDeveloperId(), serviceId, request.getEnvId());
+                .findByOrgIdAndDeveloperIdAndApiIdAndEnvId(
+                        orgId, request.getDeveloperId(), apiId, request.getEnvId());
 
         if (existing.isPresent()) {
             APISubscription sub = existing.get();
@@ -74,9 +74,9 @@ public class APISubscriptionService {
             }
         }
 
-        deploymentRepository.findByServiceIdAndEnvironmentId(serviceId, request.getEnvId())
+        deploymentRepository.findByApiIdAndEnvironmentId(apiId, request.getEnvId())
                 .orElseThrow(() -> new BusinessException(
-                        "No deployed revision found for service " + service.getName() + " in environment " + request.getEnvId()));
+                        "No deployed revision found for API " + api.getName() + " in environment " + request.getEnvId()));
 
         String apiKey;
         List<APISubscription> activeSubscriptions = subscriptionRepository
@@ -93,7 +93,7 @@ public class APISubscriptionService {
                 .orgId(orgId)
                 .envId(request.getEnvId())
                 .developerId(request.getDeveloperId())
-                .serviceId(serviceId)
+                .apiId(apiId)
                 .status(SubscriptionStatus.PENDING)
                 .apiKey(apiKey)
                 .createdAt(LocalDateTime.now())
@@ -101,7 +101,7 @@ public class APISubscriptionService {
                 .build();
 
         try {
-            createOrUpdateConsumerInApisix(environment, request.getDeveloperId(), apiKey, orgId, request.getDeveloperId(), serviceId);
+            createOrUpdateConsumerInApisix(environment, request.getDeveloperId(), apiKey, orgId, request.getDeveloperId(), apiId);
             subscription.setStatus(SubscriptionStatus.ACTIVE);
         } catch (Exception e) {
             throw new BusinessException("Failed to create subscription in APISIX: " + e.getMessage());
@@ -125,8 +125,8 @@ public class APISubscriptionService {
         return subscriptionRepository.findByOrgId(orgId, pageable);
     }
 
-    public Page<APISubscription> getSubscriptionsByService(String orgId, String serviceId, Pageable pageable) {
-        return subscriptionRepository.findByOrgIdAndServiceId(orgId, serviceId, pageable);
+    public Page<APISubscription> getSubscriptionsByApi(String orgId, String apiId, Pageable pageable) {
+        return subscriptionRepository.findByOrgIdAndApiId(orgId, apiId, pageable);
     }
 
     @Transactional
@@ -142,12 +142,12 @@ public class APISubscriptionService {
         }
 
         // Validate service is still deployed
-        Service service = apiServiceService.getServiceById(subscription.getServiceId());
-        boolean isDeployed = deploymentRepository.existsByServiceIdAndEnvironmentId(
-                subscription.getServiceId(), subscription.getEnvId());
+        Api api = apiService.getApiById(subscription.getApiId());
+        boolean isDeployed = deploymentRepository.existsByApiIdAndEnvironmentId(
+                subscription.getApiId(), subscription.getEnvId());
 
         if (!isDeployed) {
-            throw new BusinessException("Service " + service.getName() + " is not deployed in environment " + subscription.getEnvId());
+            throw new BusinessException("API " + api.getName() + " is not deployed in environment " + subscription.getEnvId());
         }
 
         Environment environment = environmentRepository.findById(subscription.getEnvId())
@@ -159,7 +159,7 @@ public class APISubscriptionService {
 
         try {
             createOrUpdateConsumerInApisix(environment, subscription.getDeveloperId(),
-                    subscription.getApiKey(), orgId, subscription.getDeveloperId(), subscription.getServiceId());
+                    subscription.getApiKey(), orgId, subscription.getDeveloperId(), subscription.getApiId());
             return subscription;
         } catch (Exception e) {
             subscription.setStatus(SubscriptionStatus.REVOKED);
@@ -190,7 +190,7 @@ public class APISubscriptionService {
 
         try {
             updateConsumerServiceWhitelist(environment, subscription.getDeveloperId(),
-                    orgId, subscription.getDeveloperId(), subscription.getServiceId());
+                    orgId, subscription.getDeveloperId(), subscription.getApiId());
         } catch (Exception e) {
             subscription.setStatus(SubscriptionStatus.ACTIVE);
             subscription.setUpdatedAt(LocalDateTime.now());
@@ -210,7 +210,7 @@ public class APISubscriptionService {
                 .findByOrgIdAndDeveloperIdAndEnvIdAndStatus(orgId, developerId, environment.getId(), SubscriptionStatus.ACTIVE);
 
         List<String> serviceWhitelist = activeSubscriptions.stream()
-                .map(APISubscription::getServiceId)
+                .map(APISubscription::getApiId)
                 .distinct()
                 .collect(Collectors.toList());
 
@@ -252,7 +252,7 @@ public class APISubscriptionService {
         List<APISubscription> activeSubscriptions = subscriptionRepository
                 .findByOrgIdAndDeveloperIdAndEnvIdAndStatus(orgId, developerId, environment.getId(), SubscriptionStatus.ACTIVE)
                 .stream()
-                .filter(sub -> !sub.getServiceId().equals(serviceIdToRemove))
+                .filter(sub -> !sub.getApiId().equals(serviceIdToRemove))
                 .collect(Collectors.toList());
 
         if (activeSubscriptions.isEmpty()) {

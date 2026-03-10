@@ -11,7 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/orgs/{orgId}/services/{serviceId}/revisions")
+@RequestMapping("/api/orgs/{orgId}/apis/{apiId}/revisions")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 @Hidden
@@ -22,25 +22,25 @@ public class ServiceRevisionController {
     @PostMapping
     public ResponseEntity<ServiceRevisionResponse> createRevision(
             @PathVariable String orgId,
-            @PathVariable String serviceId,
+            @PathVariable String apiId,
             @Valid @RequestBody CreateServiceRevisionRequest request) {
-        ServiceRevisionResponse revision = revisionService.createRevision(serviceId, request);
+        ServiceRevisionResponse revision = revisionService.createRevision(apiId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(revision);
     }
 
     @GetMapping
     public ResponseEntity<PaginatedResponse<ServiceRevisionResponse>> getRevisions(
             @PathVariable String orgId,
-            @PathVariable String serviceId,
+            @PathVariable String apiId,
             @Valid @ModelAttribute PaginationRequest pagination) {
-        return ResponseEntity.ok(revisionService.getRevisionsByService(
-                serviceId, pagination.toPageable().withSort(Sort.by(Sort.Direction.DESC, "revisionNumber"))));
+        return ResponseEntity.ok(revisionService.getRevisionsByApi(
+                apiId, pagination.toPageable().withSort(Sort.by(Sort.Direction.DESC, "revisionNumber"))));
     }
 
     @GetMapping("/{revisionId}")
     public ResponseEntity<ServiceRevisionResponse> getRevision(
             @PathVariable String orgId,
-            @PathVariable String serviceId,
+            @PathVariable String apiId,
             @PathVariable String revisionId) {
         return ResponseEntity.ok(revisionService.getRevisionById(revisionId));
     }
@@ -48,7 +48,7 @@ public class ServiceRevisionController {
     @PutMapping("/{revisionId}")
     public ResponseEntity<ServiceRevisionResponse> updateRevisionSpecs(
             @PathVariable String orgId,
-            @PathVariable String serviceId,
+            @PathVariable String apiId,
             @PathVariable String revisionId,
             @Valid @RequestBody UpdateRevisionSpecsRequest request) {
         return ResponseEntity.ok(revisionService.updateRevisionSpecs(revisionId, request));
@@ -57,7 +57,7 @@ public class ServiceRevisionController {
     @PutMapping("/{revisionId}/upstream-bindings")
     public ResponseEntity<ServiceRevisionResponse> updateUpstreamBindings(
             @PathVariable String orgId,
-            @PathVariable String serviceId,
+            @PathVariable String apiId,
             @PathVariable String revisionId,
             @Valid @RequestBody UpdateUpstreamBindingsRequest request) {
         return ResponseEntity.ok(revisionService.updateUpstreamBindings(revisionId, request));
@@ -66,7 +66,7 @@ public class ServiceRevisionController {
     @DeleteMapping("/{revisionId}")
     public ResponseEntity<Void> deleteRevision(
             @PathVariable String orgId,
-            @PathVariable String serviceId,
+            @PathVariable String apiId,
             @PathVariable String revisionId) {
         revisionService.deleteRevision(revisionId);
         return ResponseEntity.noContent().build();
@@ -75,26 +75,24 @@ public class ServiceRevisionController {
     @PostMapping("/{revisionId}/clone")
     public ResponseEntity<ServiceRevisionResponse> cloneRevision(
             @PathVariable String orgId,
-            @PathVariable String serviceId,
+            @PathVariable String apiId,
             @PathVariable String revisionId) {
         return ResponseEntity.status(HttpStatus.CREATED).body(revisionService.cloneRevision(revisionId));
     }
 
-
     @PostMapping("/{revisionId}/deploy")
     public ResponseEntity<ServiceRevisionResponse> deployRevision(
             @PathVariable String orgId,
-            @PathVariable String serviceId,
+            @PathVariable String apiId,
             @PathVariable String revisionId,
             @Valid @RequestBody DeployRequest request) {
         return ResponseEntity.ok(revisionService.deployRevision(revisionId, request));
     }
 
-
     @PostMapping("/{revisionId}/undeploy")
     public ResponseEntity<ServiceRevisionResponse> undeployRevision(
             @PathVariable String orgId,
-            @PathVariable String serviceId,
+            @PathVariable String apiId,
             @PathVariable String revisionId,
             @Valid @RequestBody UndeployRequest request) {
         return ResponseEntity.ok(revisionService.undeployRevision(revisionId, request));

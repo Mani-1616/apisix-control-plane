@@ -1,7 +1,7 @@
 package com.apisix.controlplane.service;
 
 import com.apisix.controlplane.apisix.model.RouteSpec;
-import com.apisix.controlplane.entity.Service;
+import com.apisix.controlplane.entity.Api;
 import com.apisix.controlplane.entity.Environment;
 import com.apisix.controlplane.entity.ServiceRevision;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -37,18 +37,17 @@ public class ApisixIntegrationService {
      * Deploy service and routes to an APISIX environment.
      */
     public void deployServiceAndRoutes(Environment environment, ServiceRevision revision,
-                                       Service service,
+                                       Api api,
                                        com.apisix.controlplane.entity.Upstream upstream) {
-        log.info("Deploying service '{}' (Rev {}) to APISIX at {} using upstream {}",
-                service.getName(), revision.getRevisionNumber(),
+        log.info("Deploying API '{}' (Rev {}) to APISIX at {} using upstream {}",
+                api.getName(), revision.getRevisionNumber(),
                 environment.getApisixAdminUrl(), upstream.getApisixId());
 
         WebClient webClient = buildWebClient(environment);
         String upstreamId = upstream.getApisixId();
 
-        // Step 1: Create/Update APISIX Service (using Postgres service UUID as APISIX service ID)
-        String serviceId = service.getId();
-        Map<String, Object> servicePayload = buildServicePayload(upstreamId, revision, service);
+        String serviceId = api.getId();
+        Map<String, Object> servicePayload = buildServicePayload(upstreamId, revision, api);
 
         try {
             log.info("Creating service {} with payload: {}", serviceId, servicePayload);
@@ -74,8 +73,8 @@ public class ApisixIntegrationService {
         for (int i = 0; i < routeSpecs.size(); i++) {
             RouteSpec routeSpec = routeSpecs.get(i);
             String routeName = routeSpec.getName() != null ? routeSpec.getName() : "route-" + i;
-            String routeId = generateRouteId(service.getOrgId(), environment.getId(),
-                    service.getName(), routeName, i);
+            String routeId = generateRouteId(api.getOrgId(), environment.getId(),
+                    api.getName(), routeName, i);
 
             Map<String, Object> routePayload = buildRoutePayload(routeSpec);
 
@@ -99,28 +98,27 @@ public class ApisixIntegrationService {
             }
         }
 
-        log.info("Successfully deployed service and {} routes to APISIX", routeSpecs.size());
+        log.info("Successfully deployed API and {} routes to APISIX", routeSpecs.size());
     }
 
     /**
      * Undeploy service and routes from an APISIX environment.
      */
     public void undeployServiceAndRoutes(Environment environment, ServiceRevision revision,
-                                         Service service) {
-        log.info("Undeploying service '{}' (Rev {}) from APISIX at {}",
-                service.getName(), revision.getRevisionNumber(), environment.getApisixAdminUrl());
+                                         Api api) {
+        log.info("Undeploying API '{}' (Rev {}) from APISIX at {}",
+                api.getName(), revision.getRevisionNumber(), environment.getApisixAdminUrl());
 
         WebClient webClient = buildWebClient(environment);
-        String serviceId = service.getId();
+        String serviceId = api.getId();
 
-        // Delete routes first
         List<RouteSpec> routeSpecs = revision.getRouteSpecifications();
         int deletedRoutes = 0;
         for (int i = 0; i < routeSpecs.size(); i++) {
             RouteSpec routeSpec = routeSpecs.get(i);
             String routeName = routeSpec.getName() != null ? routeSpec.getName() : "route-" + i;
-            String routeId = generateRouteId(service.getOrgId(), environment.getId(),
-                    service.getName(), routeName, i);
+            String routeId = generateRouteId(api.getOrgId(), environment.getId(),
+                    api.getName(), routeName, i);
 
             if (tryDeleteRoute(webClient, routeId, routeName)) {
                 deletedRoutes++;
@@ -137,7 +135,7 @@ public class ApisixIntegrationService {
             throw new RuntimeException("Failed to delete service from APISIX: " + serviceId);
         }
 
-        log.info("Successfully undeployed service and routes from APISIX");
+        log.info("Successfully undeployed API and routes from APISIX");
     }
 
     /**
@@ -145,7 +143,7 @@ public class ApisixIntegrationService {
      * Sets upstream_id and adds a description fallback.
      */
     @SuppressWarnings("unchecked")
-    private Map<String, Object> buildServicePayload(String upstreamId, ServiceRevision revision, Service service) {
+    private Map<String, Object> buildServicePayload(String upstreamId, ServiceRevision revision, Api api) {
         Map<String, Object> payload;
 
         if (revision.getServiceSpecification() != null) {
@@ -160,7 +158,7 @@ public class ApisixIntegrationService {
 
         // Default description if not set
         if (!payload.containsKey("desc") || payload.get("desc") == null) {
-            payload.put("desc", String.format("%s - Revision %d", service.getName(), revision.getRevisionNumber()));
+            payload.put("desc", String.format("%s - Revision %d", api.getName(), revision.getRevisionNumber()));
         }
 
         return payload;

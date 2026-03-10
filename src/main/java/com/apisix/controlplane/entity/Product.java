@@ -9,6 +9,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -40,10 +41,14 @@ public class Product {
     @Column(name = "display_name")
     private String displayName;
 
-    /** List of ApiService IDs that are part of this product. Replaces the former apiNames field. */
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "service_ids", columnDefinition = "jsonb")
-    private List<String> serviceIds;
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "product_apis",
+        joinColumns = @JoinColumn(name = "product_id"),
+        inverseJoinColumns = @JoinColumn(name = "api_id")
+    )
+    @Builder.Default
+    private List<Api> apis = new ArrayList<>();
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "plugins", columnDefinition = "jsonb")

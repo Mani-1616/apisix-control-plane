@@ -32,8 +32,8 @@ public class UpstreamBinding {
     @Column(name = "org_id", nullable = false)
     private String orgId;
 
-    @Column(name = "service_id", nullable = false)
-    private String serviceId;
+    @Column(name = "api_id", nullable = false)
+    private String apiId;
 
     @Column(name = "revision_id", nullable = false)
     private String revisionId;

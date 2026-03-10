@@ -2,6 +2,8 @@ package com.apisix.controlplane.repository;
 
 import com.apisix.controlplane.entity.ProductSubscription;
 import com.apisix.controlplane.enums.SubscriptionStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -28,4 +30,14 @@ public interface ProductSubscriptionRepository extends JpaRepository<ProductSubs
     List<ProductSubscription> findByProductId(String productId);
 
     List<ProductSubscription> findByOrgIdAndProductId(String orgId, String productId);
+
+    Page<ProductSubscription> findByOrgId(String orgId, Pageable pageable);
+
+    Page<ProductSubscription> findByOrgIdAndDeveloperId(String orgId, String developerId, Pageable pageable);
+
+    Page<ProductSubscription> findByOrgIdAndEnvId(String orgId, String envId, Pageable pageable);
+
+    Page<ProductSubscription> findByOrgIdAndDeveloperIdAndEnvId(String orgId, String developerId, String envId, Pageable pageable);
+
+    Page<ProductSubscription> findByOrgIdAndProductId(String orgId, String productId, Pageable pageable);
 }

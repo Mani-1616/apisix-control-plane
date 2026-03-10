@@ -1,7 +1,7 @@
 package com.apisix.controlplane.dto;
 
 import com.apisix.controlplane.entity.Product;
-import com.apisix.controlplane.entity.Service;
+import com.apisix.controlplane.entity.Api;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -25,14 +25,14 @@ public class ProductResponse {
     private String name;
     private String description;
     private String displayName;
-    private List<Service> services;
+    private List<Api> apis;
 
     @Schema(description = "Plugins configuration")
     private Map<String, Object> plugins;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
-    public static ProductResponse fromEntity(Product product, List<Service> services) {
+    public static ProductResponse fromEntity(Product product) {
         return ProductResponse.builder()
                 .id(product.getId())
                 .orgId(product.getOrgId())
@@ -40,7 +40,7 @@ public class ProductResponse {
                 .name(product.getName())
                 .description(product.getDescription())
                 .displayName(product.getDisplayName())
-                .services(services)
+                .apis(product.getApis())
                 .plugins(product.getPlugins())
                 .createdAt(product.getCreatedAt())
                 .updatedAt(product.getUpdatedAt())

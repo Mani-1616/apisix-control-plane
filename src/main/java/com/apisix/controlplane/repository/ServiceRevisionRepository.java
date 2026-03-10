@@ -13,17 +13,17 @@ import java.util.Optional;
 @Repository
 public interface ServiceRevisionRepository extends JpaRepository<ServiceRevision, String> {
 
-    List<ServiceRevision> findByServiceId(String serviceId);
+    List<ServiceRevision> findByApiId(String apiId);
 
-    Page<ServiceRevision> findByServiceId(String serviceId, Pageable pageable);
+    Page<ServiceRevision> findByApiId(String apiId, Pageable pageable);
 
-    List<ServiceRevision> findByServiceIdOrderByRevisionNumberDesc(String serviceId);
+    List<ServiceRevision> findByApiIdOrderByRevisionNumberDesc(String apiId);
 
-    Optional<ServiceRevision> findByServiceIdAndRevisionNumber(String serviceId, Integer revisionNumber);
+    Optional<ServiceRevision> findByApiIdAndRevisionNumber(String apiId, Integer revisionNumber);
 
-    Optional<ServiceRevision> findFirstByServiceIdOrderByRevisionNumberDesc(String serviceId);
+    Optional<ServiceRevision> findFirstByApiIdOrderByRevisionNumberDesc(String apiId);
 
-    List<ServiceRevision> findByServiceIdAndState(String serviceId, RevisionState state);
+    List<ServiceRevision> findByApiIdAndState(String apiId, RevisionState state);
 
-    List<ServiceRevision> findByServiceIdInOrderByServiceIdAscRevisionNumberDesc(List<String> serviceIds);
+    List<ServiceRevision> findByApiIdInOrderByApiIdAscRevisionNumberDesc(List<String> apiIds);
 }

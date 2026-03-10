@@ -20,7 +20,7 @@ public class ServiceRevisionResponse {
 
     private String id;
     private String orgId;
-    private String serviceId;
+    private String apiId;
     private Integer revisionNumber;
     private RevisionState state;
     private ServiceSpec serviceSpecification;
@@ -36,7 +36,7 @@ public class ServiceRevisionResponse {
         return ServiceRevisionResponse.builder()
                 .id(revision.getId())
                 .orgId(revision.getOrgId())
-                .serviceId(revision.getServiceId())
+                .apiId(revision.getApiId())
                 .revisionNumber(revision.getRevisionNumber())
                 .state(revision.getState())
                 .serviceSpecification(revision.getServiceSpecification())

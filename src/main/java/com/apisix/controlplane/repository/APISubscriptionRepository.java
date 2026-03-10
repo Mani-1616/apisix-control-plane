@@ -21,7 +21,7 @@ public interface APISubscriptionRepository extends JpaRepository<APISubscription
 
     List<APISubscription> findByOrgId(String orgId);
 
-    List<APISubscription> findByOrgIdAndServiceId(String orgId, String serviceId);
+    List<APISubscription> findByOrgIdAndApiId(String orgId, String apiId);
 
     Page<APISubscription> findByOrgIdAndDeveloperId(String orgId, String developerId, Pageable pageable);
 
@@ -31,17 +31,17 @@ public interface APISubscriptionRepository extends JpaRepository<APISubscription
 
     Page<APISubscription> findByOrgId(String orgId, Pageable pageable);
 
-    Page<APISubscription> findByOrgIdAndServiceId(String orgId, String serviceId, Pageable pageable);
+    Page<APISubscription> findByOrgIdAndApiId(String orgId, String apiId, Pageable pageable);
 
-    Optional<APISubscription> findByOrgIdAndDeveloperIdAndServiceIdAndEnvId(
-            String orgId, String developerId, String serviceId, String envId);
+    Optional<APISubscription> findByOrgIdAndDeveloperIdAndApiIdAndEnvId(
+            String orgId, String developerId, String apiId, String envId);
 
     List<APISubscription> findByOrgIdAndDeveloperIdAndEnvIdAndStatus(
             String orgId, String developerId, String envId, SubscriptionStatus status);
 
-    boolean existsByOrgIdAndDeveloperIdAndServiceIdAndEnvId(
-            String orgId, String developerId, String serviceId, String envId);
+    boolean existsByOrgIdAndDeveloperIdAndApiIdAndEnvId(
+            String orgId, String developerId, String apiId, String envId);
 
-    Optional<APISubscription> findByOrgIdAndDeveloperIdAndServiceIdAndEnvIdAndStatus(
-            String orgId, String developerId, String serviceId, String envId, SubscriptionStatus status);
+    Optional<APISubscription> findByOrgIdAndDeveloperIdAndApiIdAndEnvIdAndStatus(
+            String orgId, String developerId, String apiId, String envId, SubscriptionStatus status);
 }

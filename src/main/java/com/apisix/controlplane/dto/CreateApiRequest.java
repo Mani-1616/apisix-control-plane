@@ -4,9 +4,9 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 @Data
-public class CreateServiceRequest {
+public class CreateApiRequest {
 
-    @NotBlank(message = "Service name is required")
+    @NotBlank(message = "API name is required")
     private String name;
 
     private String displayName;

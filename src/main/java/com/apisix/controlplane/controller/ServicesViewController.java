@@ -1,11 +1,11 @@
 package com.apisix.controlplane.controller;
 
+import com.apisix.controlplane.dto.ApiWithRevisionsResponse;
 import com.apisix.controlplane.dto.PaginatedResponse;
 import com.apisix.controlplane.dto.PaginationRequest;
 import com.apisix.controlplane.dto.RevisionSummary;
-import com.apisix.controlplane.dto.ServiceWithRevisionsResponse;
-import com.apisix.controlplane.entity.Service;
-import com.apisix.controlplane.service.ApiServiceService;
+import com.apisix.controlplane.entity.Api;
+import com.apisix.controlplane.service.ApiService;
 import com.apisix.controlplane.service.ServiceRevisionService;
 import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -20,37 +20,34 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/orgs/{orgId}/services")
+@RequestMapping("/api/orgs/{orgId}/apis")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 @Tag(name = "Services Overview")
 @Hidden
 public class ServicesViewController {
 
-    private final ApiServiceService apiServiceService;
+    private final ApiService apiService;
     private final ServiceRevisionService revisionService;
 
     @GetMapping("/overview")
-    public ResponseEntity<PaginatedResponse<ServiceWithRevisionsResponse>> getServicesOverview(
+    public ResponseEntity<PaginatedResponse<ApiWithRevisionsResponse>> getServicesOverview(
             @PathVariable String orgId,
             @Valid @ModelAttribute PaginationRequest pagination) {
 
-        // 1. Get paginated services
-        Page<Service> servicePage = apiServiceService.getServicesByOrg(
+        Page<Api> apiPage = apiService.getApisByOrg(
                 orgId, pagination.toPageable().withSort(Sort.by(Sort.Direction.ASC, "name")));
 
-        // 2. Batch-fetch revision summaries from ServiceRevisionService
-        List<String> serviceIds = servicePage.getContent().stream().map(Service::getId).toList();
-        Map<String, List<RevisionSummary>> revisionsByService = revisionService.getRevisionSummariesByServiceIds(serviceIds);
+        List<String> apiIds = apiPage.getContent().stream().map(Api::getId).toList();
+        Map<String, List<RevisionSummary>> revisionsByApi = revisionService.getRevisionSummariesByApiIds(apiIds);
 
-        // 3. Assemble composite response
-        List<ServiceWithRevisionsResponse> content = servicePage.getContent().stream()
-                .map(svc -> ServiceWithRevisionsResponse.fromEntity(
-                        svc,
-                        revisionsByService.getOrDefault(svc.getId(), List.of())
+        List<ApiWithRevisionsResponse> content = apiPage.getContent().stream()
+                .map(api -> ApiWithRevisionsResponse.fromEntity(
+                        api,
+                        revisionsByApi.getOrDefault(api.getId(), List.of())
                 ))
                 .toList();
 
-        return ResponseEntity.ok(PaginatedResponse.from(servicePage, content));
+        return ResponseEntity.ok(PaginatedResponse.from(apiPage, content));
     }
 }
