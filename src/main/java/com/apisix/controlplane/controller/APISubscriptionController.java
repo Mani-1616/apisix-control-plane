@@ -37,14 +37,28 @@ public class APISubscriptionController {
     }
 
     @GetMapping("/subscriptions")
-    public ResponseEntity<PaginatedResponse<APISubscription>> getAllSubscriptions(
+    public ResponseEntity<PaginatedResponse<APISubscription>> getSubscriptionsByOrg(
             @PathVariable String orgId,
             @RequestParam(required = false) String developerId,
             @RequestParam(required = false) String envId,
             @Valid @ModelAttribute PaginationRequest pagination) {
         log.info("GET /api/orgs/{}/subscriptions - Fetching subscriptions (developerId: {}, envId: {})",
                 orgId, developerId, envId);
-        Page<APISubscription> page = subscriptionService.getSubscriptionsByOrganization(
+        Page<APISubscription> page = subscriptionService.getSubscriptions(
+                orgId, developerId, envId,
+                pagination.toPageable().withSort(Sort.by(Sort.Direction.DESC, "createdAt")));
+        return ResponseEntity.ok(PaginatedResponse.from(page, page.getContent()));
+    }
+
+    @GetMapping("/envs/{envId}/subscriptions")
+    public ResponseEntity<PaginatedResponse<APISubscription>> getSubscriptionsByEnv(
+            @PathVariable String orgId,
+            @PathVariable String envId,
+            @RequestParam(required = false) String developerId,
+            @Valid @ModelAttribute PaginationRequest pagination) {
+        log.info("GET /api/orgs/{}/envs/{}/subscriptions - Fetching subscriptions (developerId: {})",
+                orgId, envId, developerId);
+        Page<APISubscription> page = subscriptionService.getSubscriptions(
                 orgId, developerId, envId,
                 pagination.toPageable().withSort(Sort.by(Sort.Direction.DESC, "createdAt")));
         return ResponseEntity.ok(PaginatedResponse.from(page, page.getContent()));

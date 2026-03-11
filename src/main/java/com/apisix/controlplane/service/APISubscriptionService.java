@@ -112,7 +112,7 @@ public class APISubscriptionService {
         return saved;
     }
 
-    public Page<APISubscription> getSubscriptionsByOrganization(String orgId, String developerId, String envId, Pageable pageable) {
+    public Page<APISubscription> getSubscriptions(String orgId, String developerId, String envId, Pageable pageable) {
         if (developerId != null && !developerId.isEmpty() && envId != null && !envId.isEmpty()) {
             return subscriptionRepository.findByOrgIdAndDeveloperIdAndEnvId(orgId, developerId, envId, pageable);
         }

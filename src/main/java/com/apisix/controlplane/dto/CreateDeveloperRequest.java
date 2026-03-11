@@ -4,6 +4,8 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
+import java.util.Map;
+
 @Data
 public class CreateDeveloperRequest {
     
@@ -16,5 +18,7 @@ public class CreateDeveloperRequest {
 
     @NotBlank(message = "Last name is required")
     private String lastName;
+
+    private Map<String, Object> customAttributes;
 }
 

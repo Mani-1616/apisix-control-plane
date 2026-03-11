@@ -38,12 +38,26 @@ public class ProductSubscriptionController {
     }
 
     @GetMapping("/products/subscriptions")
-    public ResponseEntity<PaginatedResponse<ProductSubscription>> getAllSubscriptions(
+    public ResponseEntity<PaginatedResponse<ProductSubscription>> getSubscriptionsByOrg(
             @PathVariable String orgId,
+            @RequestParam(required = false) String developerId,
             @RequestParam(required = false) String envId,
+            @Valid @ModelAttribute PaginationRequest pagination) {
+        log.info("GET /api/orgs/{}/products/subscriptions - Fetching subscriptions (developerId: {}, envId: {})",
+                orgId, developerId, envId);
+        Page<ProductSubscription> page = subscriptionService.getSubscriptionsByOrganization(
+                orgId, envId, developerId,
+                pagination.toPageable().withSort(Sort.by(Sort.Direction.DESC, "createdAt")));
+        return ResponseEntity.ok(PaginatedResponse.from(page, page.getContent()));
+    }
+
+    @GetMapping("/envs/{envId}/products/subscriptions")
+    public ResponseEntity<PaginatedResponse<ProductSubscription>> getSubscriptionsByEnv(
+            @PathVariable String orgId,
+            @PathVariable String envId,
             @RequestParam(required = false) String developerId,
             @Valid @ModelAttribute PaginationRequest pagination) {
-        log.info("GET /api/orgs/{}/products/subscriptions - Fetching subscriptions (envId: {}, developerId: {})",
+        log.info("GET /api/orgs/{}/envs/{}/products/subscriptions - Fetching subscriptions (developerId: {})",
                 orgId, envId, developerId);
         Page<ProductSubscription> page = subscriptionService.getSubscriptionsByOrganization(
                 orgId, envId, developerId,

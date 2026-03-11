@@ -5,8 +5,11 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @Entity
 @Table(name = "developers", uniqueConstraints = {
@@ -33,6 +36,10 @@ public class Developer {
 
     @Column(name = "last_name")
     private String lastName;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "custom_attributes", columnDefinition = "jsonb")
+    private Map<String, Object> customAttributes;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;

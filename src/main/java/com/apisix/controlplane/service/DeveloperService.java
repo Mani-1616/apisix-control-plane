@@ -46,6 +46,7 @@ public class DeveloperService {
                 .email(request.getEmail())
                 .firstName(request.getFirstName())
                 .lastName(request.getLastName())
+                .customAttributes(request.getCustomAttributes())
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
@@ -97,6 +98,7 @@ public class DeveloperService {
         
         developer.setFirstName(request.getFirstName());
         developer.setLastName(request.getLastName());
+        developer.setCustomAttributes(request.getCustomAttributes());
         developer.setUpdatedAt(LocalDateTime.now());
         
         Developer updated = developerRepository.save(developer);

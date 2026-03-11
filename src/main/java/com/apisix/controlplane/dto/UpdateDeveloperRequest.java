@@ -3,6 +3,8 @@ package com.apisix.controlplane.dto;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
+import java.util.Map;
+
 @Data
 public class UpdateDeveloperRequest {
 
@@ -11,4 +13,6 @@ public class UpdateDeveloperRequest {
 
     @NotBlank(message = "Last name is required")
     private String lastName;
+
+    private Map<String, Object> customAttributes;
 }

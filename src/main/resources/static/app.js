@@ -1326,12 +1326,23 @@ document.getElementById('createDeveloperForm').addEventListener('submit', async 
     const email = document.getElementById('developerEmail').value;
     const firstName = document.getElementById('developerFirstName').value;
     const lastName = document.getElementById('developerLastName').value;
+    const customAttrsRaw = document.getElementById('developerCustomAttributes').value.trim();
+
+    let customAttributes = null;
+    if (customAttrsRaw) {
+        try {
+            customAttributes = JSON.parse(customAttrsRaw);
+        } catch (parseErr) {
+            showNotification('error', 'Invalid JSON', 'Custom Attributes must be valid JSON');
+            return;
+        }
+    }
 
     try {
         const response = await fetch(`${API_BASE}/orgs/${orgId}/developers`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, firstName, lastName })
+            body: JSON.stringify({ email, firstName, lastName, customAttributes })
         });
 
         if (response.ok) {
@@ -1375,6 +1386,9 @@ function displayDevelopers(developers, orgId) {
         <div class="card">
             <h3>${dev.firstName} ${dev.lastName}</h3>
             <p><strong>Email:</strong> ${dev.email}</p>
+            ${dev.customAttributes && Object.keys(dev.customAttributes).length > 0
+                ? `<p><strong>Custom Attributes:</strong> <code>${JSON.stringify(dev.customAttributes)}</code></p>`
+                : ''}
             <small>ID: ${dev.id}</small>
             <div class="card-actions">
                 <button onclick="deleteDeveloper('${orgId}', '${dev.id}', '${dev.firstName} ${dev.lastName}')" class="btn-danger">Remove</button>
@@ -1545,10 +1559,11 @@ async function loadSubscriptions() {
     const envId = document.getElementById('subFilterEnvId')?.value || '';
 
     try {
-        let url = `${API_BASE}/orgs/${orgId}/subscriptions`;
+        let url = envId
+            ? `${API_BASE}/orgs/${orgId}/envs/${envId}/subscriptions`
+            : `${API_BASE}/orgs/${orgId}/subscriptions`;
         const params = new URLSearchParams();
         if (developerId) params.append('developerId', developerId);
-        if (envId) params.append('envId', envId);
         params.append('size', '1000');
         url += `?${params.toString()}`;
 
@@ -1907,10 +1922,11 @@ async function loadProductSubscriptions() {
     const envId = document.getElementById('prodSubFilterEnvId')?.value || '';
 
     try {
-        let url = `${API_BASE}/orgs/${orgId}/products/subscriptions`;
+        let url = envId
+            ? `${API_BASE}/orgs/${orgId}/envs/${envId}/products/subscriptions`
+            : `${API_BASE}/orgs/${orgId}/products/subscriptions`;
         const params = new URLSearchParams();
         if (developerId) params.append('developerId', developerId);
-        if (envId) params.append('envId', envId);
         params.append('size', '1000');
         url += `?${params.toString()}`;
 
